@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "evaluation-dataset-v1",
+  "datasetId": "synthetic-example-not-for-release-gating",
+  "datasetVersion": "example-v1",
+  "versions": {
+    "employeeVersionId": "synthetic-employee-snapshot-v1",
+    "parserVersion": "resume-heuristic-v4",
+    "ruleVersion": "matching-rules-v1",
+    "thresholdVersion": "confidence-v1",
+    "normalizerVersion": "entity-rules-v1",
+    "labelPolicyVersion": "verified-relationship-v1"
+  },
+  "employees": [
+    {
+      "employeeId": "SYNTHETIC-E001",
+      "name": "合成员工",
+      "email": "synthetic-e001@example.com",
+      "currentDepartment": "合成部门",
+      "currentTitle": "合成职位",
+      "workExperiences": [],
+      "educations": [
+        {
+          "sequence": 0,
+          "school": "北京大学",
+          "major": "计算机科学与技术",
+          "startDate": "2017-09-01",
+          "endDate": "2020-06-30"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "SYNTHETIC-CASE-001",
+      "submittedAt": "2026-09-29T02:00:00.000Z",
+      "relationshipScenario": "SAME_SCHOOL_MAJOR_OVERLAP",
+      "profile": {
+        "queryId": "SYNTHETIC-CASE-001",
+        "sourceType": "TEXT",
+        "sourceFormat": "plain-text",
+        "candidateName": null,
+        "parseStatus": "PARTIAL",
+        "completeness": {
+          "hasName": false,
+          "hasWorkExperience": false,
+          "hasEducation": true,
+          "hasIncompleteWorkFields": false,
+          "hasIncompleteEducationFields": false,
+          "hasMissingDates": false
+        },
+        "warnings": [
+          "合成示例未包含工作经历。"
+        ],
+        "workExperiences": [],
+        "educations": [
+          {
+            "sequence": 0,
+            "school": {
+              "raw": "Peking University",
+              "value": "北京大学",
+              "alternatives": [],
+              "confidence": "HIGH",
+              "method": "ALIAS"
+            },
+            "major": {
+              "raw": "Computer Science",
+              "value": "计算机科学",
+              "alternatives": [],
+              "confidence": "HIGH",
+              "method": "ALIAS"
+            },
+            "dates": {
+              "raw": "2015-2019",
+              "start": "2015",
+              "end": "2019",
+              "startPrecision": "YEAR",
+              "endPrecision": "YEAR",
+              "current": false
+            }
+          }
+        ],
+        "parserVersion": "resume-heuristic-v4",
+        "normalizerVersion": "entity-rules-v1",
+        "parsedAt": "2026-09-29T02:00:00.000Z",
+        "expiresAt": "2026-10-06T02:00:00.000Z"
+      },
+      "knownRelationshipEmployeeIds": [
+        "SYNTHETIC-E001"
+      ]
+    }
+  ]
+}
