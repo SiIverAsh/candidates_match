@@ -13,15 +13,16 @@ export function runMatching(
   dependencies: MatchingDependencies,
 ): RunMatchingResult {
   const createdAt = dependencies.now().toISOString();
-  const context = dependencies.repository.loadContext(queryId, requestedBy, createdAt);
+  const employeeVersionId = dependencies.repository.findActiveEmployeeVersion();
+  const context = dependencies.repository.loadContext(queryId, requestedBy, createdAt, employeeVersionId);
   if (!context) {
     return {
       kind: "not_found",
       message: "候选人画像不存在、已过期或无权访问。",
     };
   }
-  if (!context.employeeVersionId) {
-    return { kind: "no_employee_version", message: "简历已解析。当前查询未绑定员工数据，请联系管理员导入员工数据后重新提交以进行匹配。" };
+  if (!context.employeeVersionId || context.employees.length === 0) {
+    return { kind: "no_employee_version", message: "简历已解析。当前没有可用的员工数据，请联系管理员导入后重试匹配，无需重新提交简历。" };
   }
   const run = dependencies.engine.run(
     context,

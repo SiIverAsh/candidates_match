@@ -1,30 +1,27 @@
 import { useState } from "react";
 import type { EmployeeMatchResult, MatchConfidence, MatchEvidence } from "@/modules/matching/domain/models";
 import { isGroupInitiallyOpen, type ResultGroup } from "../../domain/group-results";
+import { describeEvidence, EVIDENCE_STRENGTH_LABELS } from "../evidence-details";
 
 function confidenceClass(confidence: MatchConfidence): string {
   return confidence === "HIGH" ? "high" : confidence === "MEDIUM" ? "medium" : "low";
 }
 
 function EvidenceItem({ evidence }: { evidence: MatchEvidence }) {
-  const normalized = Object.entries(evidence.normalizedValues)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(" · ");
+  const details = describeEvidence(evidence);
   return (
     <li className="evidence-item">
       <div>
-        <span className={`evidence-strength ${evidence.strength.toLowerCase()}`}>{evidence.strength}</span>
+        <span className={`evidence-strength ${evidence.strength.toLowerCase()}`}>{EVIDENCE_STRENGTH_LABELS[evidence.strength]}</span>
         <strong>{evidence.reason}</strong>
       </div>
       <details>
-        <summary>查看证据追溯</summary>
+        <summary>查看依据详情</summary>
         <dl>
-          <div><dt>标准化值</dt><dd>{normalized}</dd></div>
-          <div><dt>候选人字段</dt><dd><code>{evidence.candidateSourceFields.join(", ")}</code></dd></div>
-          <div><dt>员工字段</dt><dd><code>{evidence.employeeSourceFields.join(", ")}</code></dd></div>
-          {evidence.overlap ? (
-            <div><dt>重叠区间</dt><dd>{evidence.overlap.start}–{evidence.overlap.end} · {evidence.overlap.precision}</dd></div>
-          ) : null}
+          {details.facts.map((fact, index) => <div key={index}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}
+          <div><dt>{details.periodLabel}</dt><dd>{details.period}{details.precision ? <small className="evidence-date-note">{details.precision}</small> : null}</dd></div>
+          <div><dt>候选人资料出处</dt>{details.candidateSources.map((source) => <dd key={source}>{source}</dd>)}</div>
+          <div><dt>员工资料出处</dt>{details.employeeSources.map((source) => <dd key={source}>{source}</dd>)}</div>
         </dl>
       </details>
     </li>
@@ -70,12 +67,14 @@ export function ConfidenceGroup({
   group,
   copiedEmail,
   onCopy,
+  initiallyOpen,
 }: {
   group: ResultGroup;
   copiedEmail: string | null;
   onCopy: (email: string) => Promise<void>;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(isGroupInitiallyOpen(group.confidence));
+  const [open, setOpen] = useState(initiallyOpen ?? isGroupInitiallyOpen(group.confidence));
   return (
     <details
       className={`confidence-group ${confidenceClass(group.confidence)}`}

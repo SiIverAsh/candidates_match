@@ -69,15 +69,15 @@ buildSheet({
     "current_department",
     "current_title",
   ],
-  example: ["E0001", "张三", "zhangsan@example.com", "商业化", "区域经理"],
-  widths: [16, 14, 28, 20, 20],
+  example: ["E0001", "周予安（虚构）", "test.employee1@example.com", "免疫研究部", "免疫学研究员"],
+  widths: [16, 22, 34, 20, 20],
 });
 
 buildSheet({
   name: "WorkExperience",
   headers: ["employee_id", "company", "title", "start_date", "end_date"],
-  example: ["E0001", "示例公司", "销售主管", new Date("2020-01-01"), null],
-  widths: [16, 24, 22, 16, 16],
+  example: ["E0001", "明澈免疫生物医药有限公司", "免疫学研究员", new Date("2020-01-01"), null],
+  widths: [16, 40, 22, 16, 16],
   dateColumns: ["D", "E"],
 });
 
@@ -86,8 +86,8 @@ buildSheet({
   headers: ["employee_id", "school", "major", "start_date", "end_date"],
   example: [
     "E0001",
-    "示例大学",
-    "市场营销",
+    "北京大学",
+    "免疫学",
     new Date("2016-09-01"),
     new Date("2020-06-30"),
   ],

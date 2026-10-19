@@ -83,20 +83,28 @@ interface EducationRow {
   end_date: string | null;
 }
 
+export function findActiveEmployeeVersion(): string | null {
+  const row = getDatabase().prepare(
+    "SELECT id FROM employee_data_versions WHERE status = 'ACTIVE'",
+  ).get() as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
 export function loadMatchingContext(
   queryId: string,
   requestedBy: string,
   now: string,
+  employeeVersionId: string | null,
 ): MatchingContext | null {
   const database = getDatabase();
   const row = database.prepare(`
     SELECT q.id AS query_id, q.submitted_by, q.submitted_at, q.expires_at,
-           q.employee_version_id, p.profile_json
+           ? AS employee_version_id, p.profile_json
     FROM candidate_queries q
     JOIN candidate_profiles p ON p.query_id = q.id
     WHERE q.id = ? AND q.submitted_by = ?
       AND q.expires_at > ? AND p.expires_at > ?
-  `).get(queryId, requestedBy, now, now) as unknown as ContextRow | undefined;
+  `).get(employeeVersionId, queryId, requestedBy, now, now) as unknown as ContextRow | undefined;
   if (!row) return null;
   if (!row.employee_version_id) {
     return { queryId: row.query_id, submittedBy: row.submitted_by, submittedAt: row.submitted_at, expiresAt: row.expires_at, employeeVersionId: null, profile: JSON.parse(row.profile_json) as CandidateProfile, employees: [] };
@@ -231,6 +239,7 @@ export function findMatchRun(
 }
 
 export const matchingRepository: MatchingRepository = {
+  findActiveEmployeeVersion,
   loadContext: loadMatchingContext,
   saveRun: saveMatchRun,
   findRun: findMatchRun,

@@ -38,7 +38,8 @@ export interface MatchingContext {
 }
 
 export interface MatchingRepository {
-  loadContext(queryId: string, requestedBy: string, now: string): MatchingContext | null;
+  findActiveEmployeeVersion(): string | null;
+  loadContext(queryId: string, requestedBy: string, now: string, employeeVersionId: string | null): MatchingContext | null;
   saveRun(run: MatchRun, requestedBy: string): void;
   findRun(queryId: string, requestedBy: string, now: string): MatchRun | null;
 }

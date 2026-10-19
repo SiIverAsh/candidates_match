@@ -98,6 +98,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
 .evidence-block { padding: 12px 16px; font-size: 12px; }
 .evidence-item strong { font-size: 12px; font-weight: 500; }
 .evidence-strength { font-size: 10px; border-radius: 4px; }
+.evidence-strength { flex-shrink: 0; white-space: nowrap; }
+.evidence-date-note { display: block; margin-top: 4px; font-size: 11px; color: #64748b; }
 .ats-global-search { display: flex; align-items: center; width: 256px; height: 30px; border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 5px; }
 .ats-global-search:focus-within { border-color: #0891b2; box-shadow: 0 0 0 2px #cffafe; }
 .ats-global-search input { min-width: 0; width: 100%; background: transparent; border: 0; padding: 5px 10px; outline: none; font-size: 12px; }
@@ -139,6 +141,14 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
 .ats-list-toolbar h1 { font-size: 13px; margin: 0; }
 .ats-list-toolbar h1 span { font-size: 11px; color: #94a3b8; margin-left: 12px; font-weight: 400; }
 .ats-list-toolbar > small { font-size: 11px; color: #94a3b8; }
+.result-category-filter { padding: 0 20px 14px; }
+.result-category-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.result-category-buttons button { display: inline-flex; align-items: center; gap: 10px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; background: #f8fafc; color: #475569; font: inherit; font-size: 13px; cursor: pointer; }
+.result-category-buttons button[aria-pressed="true"] { background: #ecfeff; border-color: #0891b2; color: #0e7490; }
+.result-category-buttons button:focus-visible { outline: 2px solid #0891b2; outline-offset: 3px; }
+.result-category-buttons button:disabled { opacity: 0.6; cursor: wait; }
+.result-category-buttons strong { border-radius: 4px; padding: 1px 7px; background: white; font-variant-numeric: tabular-nums; }
+.result-category-filter p { margin: 10px 0 0; color: #64748b; font-size: 12px; line-height: 1.7; }
 .ats-table-scroll { flex: 1; min-height: 0; overflow: auto; }
 .ats-candidate-table { min-width: 950px; }
 .ats-candidate-table thead { position: sticky; top: 0; z-index: 1; }

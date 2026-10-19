@@ -14,7 +14,7 @@ import {
   normalizeSchool,
 } from "../../domain/normalization";
 
-export const PARSER_VERSION = "resume-heuristic-v4";
+export const PARSER_VERSION = "resume-heuristic-v6";
 
 interface WorkDraft { company: string | null; title: string | null; dates: string | null }
 interface EducationDraft { school: string | null; major: string | null; dates: string | null }
@@ -22,6 +22,32 @@ type Section = "work" | "education" | null;
 
 const EMPTY_WORK = (): WorkDraft => ({ company: null, title: null, dates: null });
 const EMPTY_EDUCATION = (): EducationDraft => ({ school: null, major: null, dates: null });
+
+const COMPANY_LABEL = /^(?:公司|单位|雇主|实习公司|实习单位|company|employer)\s*[:：]/iu;
+const EDUCATION_FIELD = /^(?:学位|学历|专业|主修|就读时间|教育时间|时间|日期|degree|qualification|major|field of study|period|date)\s*[:：]/iu;
+const INSTITUTION = /大学|学院|学校|中学|\b(?:university|college|institute|school|academy|polytechnic)\b/iu;
+const SECTION_HEADING = /^(?:工作经历|工作经验|职业经历|实习经历|教育经历|教育背景|学历|work experience|employment|education)\s*[:：]?\s*$/iu;
+const NARRATIVE_HEADING = /^(?:负责|参与|发表|完成|获得|published\b|led\b|conducted\b|developed\b|worked\b)/iu;
+const FIELD_LABEL = /^(?:姓名|候选人|公司|单位|雇主|实习公司|实习单位|职位|职务|岗位|实习职位|实习岗位|学校|院校|大学|专业|主修|任职时间|工作时间|实习时间|实习日期|就读时间|教育时间|时间|日期|name|candidate name|company|employer|title|position|role|school|university|college|major|field of study|period|date)\s*[:：]/iu;
+
+function resumeLines(text: string): string[] {
+  return text.split(/\r?\n/gu).flatMap((line) => {
+    // A semicolon separates labelled fields, but can also be part of a title,
+    // company or major. Keep it unless another explicit field follows.
+    const parts = line.split(/([;；])/u);
+    const lines: string[] = [];
+    let current = parts[0];
+    for (let index = 1; index < parts.length; index += 2) {
+      const rest = parts[index + 1];
+      if (FIELD_LABEL.test(rest.trimStart()) || SECTION_HEADING.test(rest.trim())) {
+        lines.push(current);
+        current = rest;
+      } else current += parts[index] + rest;
+    }
+    lines.push(current);
+    return lines.map(cleanLine);
+  });
+}
 
 function valueAfterLabel(line: string, labels: string): string | null {
   const match = line.match(new RegExp(`^(?:${labels})\\s*[:：]\\s*(.+)$`, "iu"));
@@ -87,7 +113,7 @@ export function parseResumeText(
     currentEducation = EMPTY_EDUCATION();
   };
 
-  const sourceLines = text.replace(/\s*[；;]\s*/gu, "\n").split(/\n/gu).map(cleanLine);
+  const sourceLines = resumeLines(text);
   for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
     let line = sourceLines[lineIndex];
     if (!line) continue;
@@ -112,6 +138,26 @@ export function parseResumeText(
       line = educationSection[1]?.trim() ?? "";
       if (!line) 
         continue;
+    }
+
+    const numbered = line.match(/^(?:\d{1,3}[.．、)]|[（(]\d{1,3}[）)])[ \t]*(\S.*)$/u);
+    if (numbered) {
+      const heading = numbered[1];
+      const nextLine = sourceLines.slice(lineIndex + 1, lineIndex + 5).find((next) => next.length > 0) ?? "";
+      if (section === "work" && COMPANY_LABEL.test(nextLine) && !FIELD_LABEL.test(heading)) {
+        flushWork();
+        currentWork.title = heading;
+        continue;
+      }
+      if (section === "education" && !FIELD_LABEL.test(heading) &&
+          (EDUCATION_FIELD.test(nextLine) || (INSTITUTION.test(heading) && !NARRATIVE_HEADING.test(heading)))) {
+        flushEducation();
+        currentEducation.school = heading;
+        continue;
+      }
+      // Numbered labelled records and date-first rows still use the same field
+      // parser as unnumbered resumes.
+      if (FIELD_LABEL.test(heading) || looksLikeDateRange(heading)) line = heading;
     }
 
     const inferredEducation = inferEducationAt([line, ...sourceLines.slice(lineIndex + 1, lineIndex + 4)], 0);
@@ -143,7 +189,8 @@ export function parseResumeText(
 
     const company = valueAfterLabel(line, "公司|单位|雇主|实习公司|实习单位|company|employer");
     if (company) {
-      if (hasValue(currentWork)) flushWork();
+      if (currentWork.company) flushWork();
+      flushEducation();
       section = "work";
       currentWork.company = company;
       continue;
@@ -152,7 +199,8 @@ export function parseResumeText(
     if (title) { section = "work"; currentWork.title = title; continue; }
     const school = valueAfterLabel(line, "学校|院校|大学|school|university|college");
     if (school) {
-      if (hasValue(currentEducation)) flushEducation();
+      if (currentEducation.school) flushEducation();
+      flushWork();
       section = "education";
       currentEducation.school = school;
       continue;

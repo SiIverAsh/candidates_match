@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { InlineMatchResults } from "../src/modules/results/presentation/components/inline-match-results";
 
 import type { EmployeeMatchResult, MatchRun } from "../src/modules/matching/domain/models";
 import {
@@ -74,4 +77,25 @@ assert.equal(isGroupInitiallyOpen("LOW"), false);
 const emptyGroups = groupMatchResults({ ...run, status: "NO_RESULTS", resultCount: 0, results: [] });
 assert.deepEqual(emptyGroups.map((group) => group.results.length), [0, 0, 0]);
 
-console.log("Results verification passed");
+const inline = renderToStaticMarkup(createElement(InlineMatchResults, { run }));
+assert.equal((inline.match(/class="confidence-group (?:high|medium|low)" open=""/g) ?? []).length, 3,
+  "单份简历结果应默认展开高、中、低三组");
+for (const employee of sourceOrder) {
+  assert.ok(inline.includes(employee.name));
+  assert.ok(inline.includes(employee.email));
+  assert.ok(inline.includes(employee.currentDepartment));
+  assert.ok(inline.includes(employee.currentTitle));
+  assert.ok(inline.includes(employee.evidence[0].reason));
+}
+const noResults = renderToStaticMarkup(createElement(InlineMatchResults, {
+  run: { ...run, status: "NO_RESULTS", resultCount: 0, results: [] },
+}));
+assert.ok(noResults.includes("暂未找到有共同经历的员工"));
+assert.equal((noResults.match(/该置信度暂无结果/g) ?? []).length, 3);
+const insufficient = renderToStaticMarkup(createElement(InlineMatchResults, {
+  run: { ...run, status: "SKIPPED_INSUFFICIENT", resultCount: 0, results: [] },
+}));
+assert.ok(insufficient.includes("有效经历不足"));
+assert.ok(!insufficient.includes("暂未找到有共同经历的员工"));
+
+console.log("Results verification passed (including inline employee cards and empty/insufficient states)");

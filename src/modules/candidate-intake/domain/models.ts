@@ -41,9 +41,12 @@ export interface CandidateQuerySummary extends CandidateQuery {
   } | null;
 }
 
+export type CandidateMatchCategory = "FOUND" | "NOT_FOUND";
+
 export interface CandidateQueryPage {
   items: CandidateQuerySummary[];
   total: number;
   page: number;
   pageSize: number;
+  resultCounts: { found: number; notFound: number };
 }

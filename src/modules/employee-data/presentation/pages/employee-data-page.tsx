@@ -77,8 +77,8 @@ export function EmployeeDataPage({
           <div className="workspace-heading admin-heading">
             <div>
               <p className="eyebrow">员工数据导入与版本</p>
-              <h1>管理员工数据</h1>
-              <p>使用标准模板导入员工、工作经历与教育经历。</p>
+              <h1>员工批量导入与管理</h1>
+              <p>使用一份标准 Excel 批量导入多位员工及其工作、教育经历。</p>
             </div>
             <span className="status-chip">服务端鉴权</span>
           </div>

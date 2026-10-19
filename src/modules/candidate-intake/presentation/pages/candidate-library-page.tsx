@@ -3,8 +3,11 @@ import { Search, Filter, RotateCcw, Users, Network, FileText, ChevronRight, Inbo
 import { api } from "@/client/api";
 import { WorkspaceHeader } from "@/components/workspace-header";
 import type { AuthenticatedUser } from "@/modules/auth/domain/user";
-import type { CandidateQueryPage, CandidateQuerySummary } from "../../domain/models";
+import type { CandidateMatchCategory, CandidateQueryPage, CandidateQuerySummary } from "../../domain/models";
 import { CandidateDetailDrawer } from "../components/candidate-detail-drawer";
+import { useBatchTask } from "@/modules/candidate-batch/presentation/use-batch-task";
+import { BatchProgress } from "@/modules/candidate-batch/presentation/batch-progress";
+import { BATCH_LIMITS } from "@/modules/candidate-batch/domain/models";
 
 const PARSE_LABELS = { COMPLETE: "解析完整", PARTIAL: "部分解析", INSUFFICIENT: "信息不足", FAILED: "解析失败", PENDING: "待解析" };
 function formatDate(value: string) { return new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }); }
@@ -20,13 +23,24 @@ export function CandidateLibraryPage({ user, onLogout, resultsOnly = false }: { 
   const [retry, setRetry] = useState(0);
   const [parseFilter, setParseFilter] = useState("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL");
+  const [matchCategory, setMatchCategory] = useState<CandidateMatchCategory>("FOUND");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
+  const batchTask = useBatchTask();
+  async function matchSelected() {
+    await batchTask.run((onEvent, signal) => api.matchCandidates(checkedIds, onEvent, signal));
+    setLoading(true); setPage(1);
+    setRetry((value) => value + 1);
+  }
+  function toggleChecked(id: string) {
+    setCheckedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : current.length < BATCH_LIMITS.maxQueryIds ? [...current, id] : current);
+  }
   useEffect(() => {
     let active = true;
-    api.candidates(page, search, resultsOnly).then((value) => { if (active) { setData(value); setError(false); } })
+    api.candidates(page, search, resultsOnly, resultsOnly ? matchCategory : undefined).then((value) => { if (active) { setData(value); setError(false); } })
       .catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [page, search, resultsOnly, retry]);
+  }, [page, search, resultsOnly, matchCategory, retry]);
   useEffect(() => {
     let active = true;
     api.candidates(1, search, !resultsOnly).then((value) => { if (active) setOtherTotal(value.total); }).catch(() => { if (active) setOtherTotal(null); });
@@ -40,7 +54,7 @@ export function CandidateLibraryPage({ user, onLogout, resultsOnly = false }: { 
   function resetFilters() { setParseFilter("ALL"); setSourceFilter("ALL"); }
   const items = data?.items.filter((item) => (parseFilter === "ALL" || (item.parseStatus ?? "PENDING") === parseFilter) && (sourceFilter === "ALL" || item.sourceType === sourceFilter)) ?? [];
   const allTotal = resultsOnly ? otherTotal : data?.total;
-  const matchedTotal = resultsOnly ? data?.total : otherTotal;
+  const matchedTotal = resultsOnly ? data ? data.resultCounts.found + data.resultCounts.notFound : null : otherTotal;
   function parseCount(status: string) { return data?.items.filter((item) => (item.parseStatus ?? "PENDING") === status).length ?? 0; }
   function matchLabel(item: CandidateQuerySummary) {
     if (!item.matching) return "尚未生成";
@@ -55,7 +69,7 @@ export function CandidateLibraryPage({ user, onLogout, resultsOnly = false }: { 
       <nav className="ats-pipeline" aria-label="候选人记录分类">
         <div className="pipeline-label"><Users size={16} /><span>候选人简历库</span><ChevronRight size={14} /></div>
         <a href="/candidates" className={!resultsOnly ? "active" : ""} aria-current={!resultsOnly ? "page" : undefined}><strong>{loading ? "—" : allTotal ?? "—"}</strong><span>全部候选人</span></a>
-        <a href="/results" className={resultsOnly ? "active" : ""} aria-current={resultsOnly ? "page" : undefined}><strong>{loading ? "—" : matchedTotal ?? "—"}</strong><span>已生成匹配</span></a>
+        <a href="/results" className={resultsOnly ? "active" : ""} aria-current={resultsOnly ? "page" : undefined}><strong>{loading ? "—" : matchedTotal ?? "—"}</strong><span>匹配结果</span></a>
         <div className="pipeline-note"><FileText size={14} />{search ? "当前搜索范围" : "仅显示你提交的资料"}</div>
       </nav>
       <div className="ats-library-body">
@@ -70,17 +84,31 @@ export function CandidateLibraryPage({ user, onLogout, resultsOnly = false }: { 
         </aside>
         <section className="ats-candidate-panel" aria-label={resultsOnly ? "匹配结果历史" : "候选人列表"}>
           <div className="ats-info-banner"><Network size={16} /><div><strong>内部人才库人脉匹配</strong><p>点击候选人查看简历与推荐依据，帮助找到可能认识该候选人的内部同事。</p></div></div>
-          <div className="ats-list-toolbar"><h1>{resultsOnly ? "结果历史" : "候选人列表"}<span>{data ? `${data.total} 条记录` : ""}</span></h1><small>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? `本页筛选后 ${items.length} 条` : "资料与人脉线索"}</small></div>
+          {resultsOnly ? <div className="result-category-filter">
+            <div className="result-category-buttons" role="group" aria-label="匹配结果分类">
+              {([["FOUND", "已找到匹配", data?.resultCounts.found], ["NOT_FOUND", "未找到可用匹配", data?.resultCounts.notFound]] as const).map(([category, label, count]) => (
+                <button type="button" key={category} aria-pressed={matchCategory === category} disabled={batchTask.running} onClick={() => {
+                  if (matchCategory === category) return;
+                  setLoading(true); setPage(1); setMatchCategory(category);
+                }}>{label}<strong>{loading ? "—" : count ?? "—"}</strong></button>
+              ))}
+            </div>
+            <p>{matchCategory === "FOUND" ? "已找到至少一位有共同经历的内部员工，点击候选人查看置信度和匹配依据。" : "已处理但暂时没有可用的内部员工推荐；资料不足的记录保留具体原因，可补充资料后重新匹配。"}</p>
+          </div> : null}
+          <div className="ats-list-toolbar"><h1>{resultsOnly ? "匹配结果" : "候选人列表"}<span>{data ? `${data.total} 条记录` : ""}</span></h1><small>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? `本页筛选后 ${items.length} 条` : "资料与人脉线索"}</small></div>
+          <div className="batch-selection-bar"><span>已选 <strong>{checkedIds.length}</strong> 位<small>支持跨页选择，最多 200 位</small></span><button type="button" className="text-button" disabled={!checkedIds.length || batchTask.running} onClick={() => setCheckedIds([])}>清空选择</button><button type="button" className="primary-button" disabled={!checkedIds.length || batchTask.running} onClick={() => void matchSelected()}><Network size={14} />{batchTask.running ? "正在匹配…" : "批量匹配所选候选人"}</button><a className="secondary-link" href="/candidates/import">批量导入简历</a></div>
+          <BatchProgress task={batchTask} />
           {loading ? <div className="ats-empty" role="status">正在加载候选人…</div> : error ? <div className="ats-empty" role="alert"><p>记录加载失败，请重试。</p><button className="primary-button" type="button" onClick={() => { setLoading(true); setRetry((value) => value + 1); }}>重新加载</button></div> : data && items.length ? <div className="ats-table-scroll"><table className="data-table ats-candidate-table">
-            <thead><tr><th>候选人基本资料</th><th>提交时间</th><th>解析状态</th><th>简历来源</th><th className="match-column">内部人脉匹配</th><th>到期时间</th></tr></thead>
+            <thead><tr><th className="batch-checkbox-cell"><input aria-label="选择本页可见候选人" type="checkbox" disabled={batchTask.running} checked={items.length > 0 && items.every((item) => checkedIds.includes(item.id))} onChange={(event) => setCheckedIds((current) => event.target.checked ? [...new Set([...current, ...items.map((item) => item.id)])].slice(0, BATCH_LIMITS.maxQueryIds) : current.filter((id) => !items.some((item) => item.id === id)))} /></th><th>候选人基本资料</th><th>提交时间</th><th>解析状态</th><th>简历来源</th><th className="match-column">内部人脉匹配</th><th>到期时间</th></tr></thead>
             <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedId(item.id)}>
+              <td className="batch-checkbox-cell" onClick={(event) => event.stopPropagation()}><input aria-label={`选择 ${item.candidateName ?? item.id}`} type="checkbox" checked={checkedIds.includes(item.id)} disabled={batchTask.running || (!checkedIds.includes(item.id) && checkedIds.length >= BATCH_LIMITS.maxQueryIds)} onChange={() => toggleChecked(item.id)} /></td>
               <td><div className="candidate-cell"><span className="candidate-avatar" aria-hidden="true">{(item.candidateName ?? "候").slice(0, 1)}</span><div><button className="candidate-name" type="button" onClick={(event) => { event.stopPropagation(); setSelectedId(item.id); }}>{item.candidateName ?? "姓名未识别"}</button><small className="table-subtitle" title={item.id}>查询编号 · {item.id}</small><a className="candidate-detail-link" href={`/candidates/${encodeURIComponent(item.id)}`} onClick={(event) => event.stopPropagation()}>完整简历 <ChevronRight size={11} /></a></div></div></td>
               <td className="date-cell">{formatDate(item.submittedAt)}</td><td><span className={`parse-badge ${(item.parseStatus ?? "PENDING").toLowerCase()}`}>{PARSE_LABELS[item.parseStatus ?? "PENDING"]}</span></td>
               <td><span className="source-badge">{item.sourceType === "FILE" ? item.sourceFormat.toUpperCase() : "文本粘贴"}</span></td>
               <td className="match-column"><button className="match-preview-button" type="button" onClick={(event) => { event.stopPropagation(); setSelectedId(item.id); }}><Network size={14} /><strong>{matchLabel(item)}</strong><ChevronRight size={13} /></button><small className="table-subtitle">{item.matching?.resultCount ? "查看置信度与共同经历" : "查看资料与处理状态"}</small></td>
               <td className="date-cell">{formatDate(item.expiresAt)}</td>
             </tr>)}</tbody>
-          </table></div> : <div className="ats-empty"><Inbox size={38} /><h2>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? "本页没有符合筛选条件的记录" : search ? "没有找到匹配的候选人" : resultsOnly ? "暂无匹配结果历史" : "开始建立你的候选人简历库"}</h2><p>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? "可重置筛选或切换页码查看其他记录。" : "上传简历或粘贴候选人经历，查找内部人脉线索。"}</p>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? <button className="text-button" type="button" onClick={resetFilters}>重置筛选</button> : <a className="button-link" href="/candidate/new">添加候选人简历</a>}</div>}
+          </table></div> : <div className="ats-empty"><Inbox size={38} /><h2>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? "本页没有符合筛选条件的记录" : search ? "当前分类没有符合搜索条件的候选人" : resultsOnly ? matchCategory === "FOUND" ? "暂无已找到匹配的候选人" : "暂无未找到可用匹配的记录" : "开始建立你的候选人简历库"}</h2><p>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? "可重置筛选或切换页码查看其他记录。" : resultsOnly ? "可切换匹配分类查看其他结果，或在候选人库选择资料重新匹配。" : "上传简历或粘贴候选人经历，查找内部人脉线索。"}</p>{parseFilter !== "ALL" || sourceFilter !== "ALL" ? <button className="text-button" type="button" onClick={resetFilters}>重置筛选</button> : resultsOnly ? <a className="secondary-link" href="/candidates">查看候选人库</a> : <a className="button-link" href="/candidate/new">添加候选人简历</a>}</div>}
           {data && !error ? <div className="library-pagination"><small>共 {data.total} 条 · 每页 {data.pageSize} 条</small><button className="text-button" disabled={page <= 1 || loading} onClick={() => changePage(page - 1)} type="button">上一页</button><span>第 {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))} 页</span><button className="text-button" disabled={page * data.pageSize >= data.total || loading} onClick={() => changePage(page + 1)} type="button">下一页</button></div> : null}
         </section>
       </div>

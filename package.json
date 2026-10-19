@@ -6,9 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "tsx server/index.ts --dev",
+    "dev": "node --env-file-if-exists=.env.local --import tsx server/index.ts --dev",
     "build": "vite build",
-    "start": "tsx server/index.ts",
+    "start": "node --env-file-if-exists=.env.local --import tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src server vite.config.ts",
     "verify:candidate-intake": "tsx scripts/verify-candidate-intake.ts",
@@ -18,6 +18,9 @@
     "verify:audit-retention": "tsx scripts/verify-audit-retention.ts",
     "verify:evaluation": "tsx scripts/verify-evaluation.ts",
     "verify:library": "node --import tsx scripts/verify-library.ts",
+    "verify:ai-batch": "node --import tsx scripts/verify-ai-batch.ts",
+    "verify:candidate-workbook": "node --import tsx scripts/verify-candidate-workbook.ts",
+    "verify:batch-report": "node --import tsx scripts/verify-batch-report.ts",
     "evaluate:dataset": "tsx scripts/evaluate-dataset.ts",
     "db:generate": "drizzle-kit generate"
   },

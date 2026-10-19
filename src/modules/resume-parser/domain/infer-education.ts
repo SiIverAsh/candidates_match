@@ -14,7 +14,7 @@ export function hasEmploymentRole(value: string): boolean {
 
 const DATE_RANGE = new RegExp(DATE_RANGE_PATTERN, "iu");
 const DEGREE = /本科|学士|硕士(?:研究生)?|博士(?:研究生)?|大专|研究生|在读|\b(?:bachelor(?:'?s)?|master(?:'?s)?|ph\.?d\.?|b\.?sc\.?|m\.?sc\.?)\b/giu;
-const MAJOR_SIGNAL = /科学|工程|技术|管理|经济|金融|营销|医学|药学|设计|语言|英语|中文|法学|物理|数学|历史|哲学|艺术|化学|生物|心理|建筑|护理|教育|传播|统计|\b(?:science|engineering|business|administration|economics|law|medicine|mathematics|physics|chemistry|psychology|history|arts?)\b/iu;
+const MAJOR_SIGNAL = /科学|工程|技术|管理|经济|金融|营销|医学|药学|免疫|肿瘤|药理|药物|设计|语言|英语|中文|法学|物理|数学|历史|哲学|艺术|化学|生物|心理|建筑|护理|教育|传播|统计|\b(?:science|engineering|business|administration|economics|law|medicine|immunology|oncology|pharmacology|biology|biochemistry|mathematics|physics|chemistry|psychology|history|arts?)\b/iu;
 const NARRATIVE = /负责|参与|合作|客户|项目|服务于|就职|任职|担任|授课|讲座|\b(?:worked|responsible|client|project|collaborated)\b/iu;
 const BOUNDARY = /^(?:工作经历|工作经验|职业经历|实习(?:经历|经验)?|教育(?:背景|经历)|技能|项目经历|个人简介|自我评价|获奖|证书|employment|work experience|internships?|education|skills?|projects?|summary)\s*[:：]?/iu;
 

@@ -41,7 +41,7 @@ const dependencies = {
 };
 
 export const candidateIntakeApplication = {
-  list: (requestedBy: string, input: { page?: number; search?: string; resultsOnly?: boolean }) => {
+  list: (requestedBy: string, input: { page?: number; search?: string; resultsOnly?: boolean; matchCategory?: string }) => {
     employeeVersions.readiness();
     return listCandidates(requestedBy, input, { list: listCandidateQueries, find: findCandidateQuery }, new Date().toISOString());
   },

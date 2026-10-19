@@ -13,6 +13,13 @@ const sufficientText = [
 
 assert.equal(validateCandidateText("只有一句简介").ok, false);
 assert.deepEqual(validateCandidateText(sufficientText), { ok: true, text: sufficientText });
+const shortStructuredText = "姓名：测试\n工作经历\n公司：示例药业\n职位：研究员";
+const shortTextResult = validateCandidateText(shortStructuredText);
+assert.equal(shortTextResult.ok, false);
+if (!shortTextResult.ok) assert.equal(shortTextResult.code, "TEXT_TOO_SHORT");
+assert.deepEqual(validateCandidateText(shortStructuredText, "WORKBOOK_ROW"), { ok: true, text: shortStructuredText });
+assert.equal(validateCandidateText("姓名：测试", "WORKBOOK_ROW").ok, false);
+assert.equal(validateCandidateText(`公司：${"长".repeat(100_000)}`, "WORKBOOK_ROW").ok, false);
 
 const invalidPdf = new TextEncoder().encode("not a pdf");
 const invalidPdfResult = await prepareResumeFile({
@@ -64,6 +71,16 @@ assert.equal(unavailable.kind, "accepted");
 if (unavailable.kind === "accepted") assert.equal(unavailable.query.employeeVersionId, null);
 
 const deps = dependencies(true);
+const structured = await submitCandidate(
+  { actor: { id: "test", displayName: "test" }, file: null, text: shortStructuredText, textOrigin: "WORKBOOK_ROW" },
+  dependencies(true),
+);
+assert.equal(structured.kind, "accepted");
+const shortResume = await submitCandidate(
+  { actor: { id: "test", displayName: "test" }, file: null, text: shortStructuredText },
+  dependencies(true),
+);
+assert.equal(shortResume.kind, "rejected");
 const accepted = await submitCandidate(
   { actor: { id: "test", displayName: "test" }, file: null, text: sufficientText },
   deps,

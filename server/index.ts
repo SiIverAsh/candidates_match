@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { auditApplication } from "../src/modules/audit/composition";
 import { candidateIntakeApplication } from "../src/modules/candidate-intake/composition";
-import { handleApi, sendJson } from "./api";
+import { handleApi, RequestBodyError, sendJson } from "./api";
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDirectory = path.join(rootDirectory, "dist");
@@ -61,7 +61,12 @@ const server = createServer(async (request, response) => {
       return;
     }
     await serveProductionFile(request, response);
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      if (!response.headersSent) sendJson(response, 413, { error: "上传内容超过大小限制。" });
+      else response.end();
+      return;
+    }
     console.error("Request failed.", {
       code: "INTERNAL_ERROR",
       method: request.method,
@@ -96,6 +101,6 @@ purgeExpiredCandidateInputs();
 const candidateCleanupTimer = setInterval(purgeExpiredCandidateInputs, 60 * 60 * 1000);
 candidateCleanupTimer.unref();
 
-server.listen(port, "127.0.0.1", () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Connection Finder running at http://127.0.0.1:${port}`);
 });

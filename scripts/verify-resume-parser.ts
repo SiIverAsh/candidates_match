@@ -84,6 +84,56 @@ assert.equal(complete.workExperiences[0]?.company.value, "Microsoft");
 assert.equal(complete.educations[0]?.school.value, "北京大学");
 assert.equal(complete.educations[0]?.dates.startPrecision, "YEAR");
 
+for (const numbers of [["1.", "2.", "3."], ["1、", "2、", "3、"], ["（1）", "（2）", "（3）"]]) {
+  const numberedResume = [
+    "姓名：编号经历测试", "工作经历",
+    `${numbers[0]} Scientist I - Neuro Discovery; siRNA discovery`,
+    "公司：示例药企 · 全职", "时间：2021年2月 - 2023年9月",
+    "职责/成果：完成药理研究", "1. Design experiments", "2. Review results",
+    `${numbers[1]} Associate Director; Co-Investigator`,
+    "公司：Scholar Rock; Voyager Therapeutics · 全职", "时间：2023年9月 - 现在",
+    `${numbers[2]} Research Intern`, "公司：Peking University", "时间：6 年 6 个月",
+    "教育经历",
+    `${numbers[0]} The Graduate Center, City University of New York`,
+    "学位：Doctor of Philosophy - PhD", "专业：Molecular and Cellular Biology", "时间：2017年 - 2021年",
+    `${numbers[1]} The Graduate Center, City University of New York`,
+    "学位：Master of Philosophy - MPhil", "专业：Cell/Cellular and Molecular Biology", "时间：2015年 - 2017年",
+    `${numbers[2]} 首都医科大学`, "学位：Doctor of Medicine - MD",
+  ].join("\n");
+  const profile = parseResumeText(textSource(numberedResume), numberedResume, parsedAt);
+  assert.deepEqual(profile.workExperiences.map(item => item.rawTitle), [
+    "Scientist I - Neuro Discovery; siRNA discovery", "Associate Director; Co-Investigator", "Research Intern",
+  ]);
+  assert.deepEqual(profile.workExperiences.map(item => item.company.raw), [
+    "示例药企 · 全职", "Scholar Rock; Voyager Therapeutics · 全职", "Peking University",
+  ]);
+  assert.equal(profile.workExperiences[0].dates.start, "2021-02");
+  assert.equal(profile.workExperiences[1].dates.current, true);
+  assert.equal(profile.workExperiences[2].dates.start, null, "时长不能被当作起止年份");
+  assert.deepEqual(profile.educations.map(item => item.school.raw), [
+    "The Graduate Center, City University of New York", "The Graduate Center, City University of New York", "首都医科大学",
+  ]);
+  assert.deepEqual(profile.educations.map(item => item.major.raw), [
+    "Molecular and Cellular Biology", "Cell/Cellular and Molecular Biology", null,
+  ]);
+  assert.deepEqual(profile.educations.map(item => item.dates.start), ["2017", "2015", null]);
+  assert.deepEqual(profile.educations.map(item => item.dates.end), ["2021", "2017", null]);
+  assert.equal(profile.parseStatus, "PARTIAL");
+}
+
+const inlineFields = "姓名：分号测试；工作经历\n公司：示例公司；职位：Scientist; siRNA discovery；任职时间：2020-2024\n教育经历\n学校：示例大学；专业：Chemistry; Biology；就读时间：2016-2020";
+const inlineProfile = parseResumeText(textSource(inlineFields), inlineFields, parsedAt);
+assert.equal(inlineProfile.candidateName, "分号测试");
+assert.equal(inlineProfile.workExperiences[0].rawTitle, "Scientist; siRNA discovery");
+assert.equal(inlineProfile.educations[0].major.raw, "Chemistry; Biology");
+const titleBeforeCompany = "工作经历\n职位：研究员\n公司：示例药业\n任职时间：2020-2024";
+const titleFirst = parseResumeText(textSource(titleBeforeCompany), titleBeforeCompany, parsedAt);
+assert.equal(titleFirst.workExperiences.length, 1);
+assert.equal(titleFirst.workExperiences[0].rawTitle, "研究员");
+assert.equal(titleFirst.workExperiences[0].company.raw, "示例药业");
+const numberedNarrative = "教育经历\n1. 示例大学\n专业：免疫学\n时间：2017-2021\n1. Published a paper with Example University\n2. Developed an assay with Example College";
+assert.equal(parseResumeText(textSource(numberedNarrative), numberedNarrative, parsedAt).educations.length, 1);
+
 for (const heading of ["实习经历", "实习经验", "实习", "工作与实习经历", "工作/实习经历", "Internship Experience", "Internships"]) {
   const resume = [
     "教育经历", "2019-2023 | 北京大学 | 计算机科学",

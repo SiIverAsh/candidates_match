@@ -17,6 +17,14 @@ import { matchingApplication } from "../src/modules/matching/composition";
 import { resumeParserApplication } from "../src/modules/resume-parser/composition";
 import type { ImportEmployeeWorkbookResult } from "../src/modules/employee-data/application/import-employee-workbook";
 import type { ImportActionState } from "../src/modules/employee-data/presentation/contracts";
+import { enterpriseAiApplication } from "../src/modules/enterprise-ai/composition";
+import { chatRequestSchema } from "../src/modules/enterprise-ai/presentation/contracts";
+import { AiError } from "../src/modules/enterprise-ai/domain/models";
+import { candidateBatchApplication } from "../src/modules/candidate-batch/composition";
+import { batchMatchSchema } from "../src/modules/candidate-batch/presentation/contracts";
+import { BATCH_LIMITS, BatchInputError } from "../src/modules/candidate-batch/domain/models";
+import type { BatchCommand } from "../src/modules/candidate-batch/application/process-batch";
+import { CANDIDATE_WORKBOOK_LIMITS } from "../src/modules/candidate-batch/domain/workbook";
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const maxRequestBytes = 12 * 1024 * 1024;
@@ -44,16 +52,20 @@ export function sendJson(
   response.end(JSON.stringify(value));
 }
 
-async function readBody(request: IncomingMessage): Promise<Buffer> {
+async function readBody(request: IncomingMessage, limit = maxRequestBytes): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buffer.length;
-    if (total > maxRequestBytes) throw new Error("REQUEST_TOO_LARGE");
+    if (total > limit) throw new RequestBodyError();
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
+}
+
+export class RequestBodyError extends Error {
+  constructor() { super("REQUEST_TOO_LARGE"); }
 }
 
 function requestHeaders(request: IncomingMessage): Headers {
@@ -196,6 +208,94 @@ export async function handleApi(
     return true;
   }
 
+  if (url.pathname.startsWith("/api/enterprise-ai/") || url.pathname.startsWith("/api/candidate-batch/")) {
+    if (!hasPermission(user, "candidate:query")) {
+      auditDeniedAccess(user.id, "ASSISTANT_OR_BATCH", "FORBIDDEN");
+      sendJson(response, 403, { error: "FORBIDDEN" });
+      return true;
+    }
+    if (request.method === "GET" && url.pathname === "/api/enterprise-ai/status") {
+      sendJson(response, 200, enterpriseAiApplication.status());
+      return true;
+    }
+    if (request.method === "POST" && url.pathname === "/api/enterprise-ai/chat") {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      response.once("close", abort);
+      try {
+        let json: unknown;
+        try { json = JSON.parse((await readBody(request, 192 * 1024)).toString("utf8")); }
+        catch (error) {
+          if (error instanceof RequestBodyError) throw error;
+          sendJson(response, 400, { error: "请求格式无效。" });
+          return true;
+        }
+        const parsed = chatRequestSchema.safeParse(json);
+        if (!parsed.success) { sendJson(response, 400, { error: "对话过长或格式无效，请缩短消息或清空对话后重试。" }); return true; }
+        sendJson(response, 200, await enterpriseAiApplication.ask(user.id, parsed.data.messages, controller.signal));
+      } catch (error) {
+        if (error instanceof RequestBodyError) sendJson(response, 413, { error: "消息太长，请缩短后重试。" });
+        else if (error instanceof AiError) sendJson(response, error.status, { error: error.message, code: error.code });
+        else throw error;
+      } finally { response.off("close", abort); }
+      return true;
+    }
+    if (request.method === "GET" && url.pathname === "/api/candidate-batch/template") {
+      const template = await readFile(path.join(rootDirectory, "assets/templates/candidate_import_template.xlsx"));
+      response.writeHead(200, { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="candidate_import_template.xlsx"', "Cache-Control": "private, no-store" });
+      response.end(template);
+      return true;
+    }
+    if (request.method === "POST" && ["/api/candidate-batch/import", "/api/candidate-batch/workbook", "/api/candidate-batch/match"].includes(url.pathname)) {
+      const isWorkbook = url.pathname.endsWith("/workbook");
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      response.once("close", abort);
+      try {
+        let command: BatchCommand;
+        if (url.pathname.endsWith("/import") || isWorkbook) {
+          const body = await readBody(request, (isWorkbook ? CANDIDATE_WORKBOOK_LIMITS.maxBytes : BATCH_LIMITS.maxTotalBytes) + 1024 * 1024);
+          let form: FormData;
+          try { form = await new Request(url, { method: "POST", headers: requestHeaders(request), body: new Uint8Array(body) }).formData(); }
+          catch { throw new BatchInputError("上传格式无效，请重新选择简历文件。"); }
+          const uploads = form.getAll(isWorkbook ? "workbook" : "resumeFiles");
+          if (uploads.some((file) => typeof file === "string")) throw new BatchInputError("请选择有效的简历文件。");
+          const matchAfterImport = form.get("matchAfterImport");
+          if (matchAfterImport !== "true" && matchAfterImport !== "false") throw new BatchInputError("请选择导入后的处理方式。");
+          if (isWorkbook) {
+            if (uploads.length !== 1) throw new BatchInputError("请选择一份候选人 Excel 文件。");
+            const rows = await candidateBatchApplication.prepareWorkbook(uploads[0] as File);
+            command = { kind: "workbook", rows, matchAfterImport: matchAfterImport === "true" };
+          } else command = { kind: "import", files: uploads as File[], matchAfterImport: matchAfterImport === "true" };
+        } else {
+          let json: unknown;
+          try { json = JSON.parse((await readBody(request, 32 * 1024)).toString("utf8")); }
+          catch (error) {
+            if (error instanceof RequestBodyError) throw error;
+            throw new BatchInputError("批量匹配请求格式无效。");
+          }
+          const parsed = batchMatchSchema.safeParse(json);
+          if (!parsed.success) throw new BatchInputError("请选择 1～200 位候选人。");
+          command = { kind: "match", queryIds: parsed.data.queryIds };
+        }
+        candidateBatchApplication.validate(command);
+        response.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "private, no-store", "X-Accel-Buffering": "no" });
+        for await (const event of candidateBatchApplication.process(command, { id: user.id, displayName: user.displayName }, controller.signal)) {
+          if (response.destroyed) break;
+          response.write(`${JSON.stringify(event)}\n`);
+        }
+        response.end();
+      } catch (error) {
+        if (response.headersSent) {
+          if (!response.destroyed) response.end(`${JSON.stringify({ type: "error", message: "批次中断，已保存的候选人可在简历库查看，请勿重复导入。" })}\n`);
+        } else if (error instanceof RequestBodyError) sendJson(response, 413, { error: isWorkbook ? "Excel 文件不能超过 10 MB。" : "上传总大小超限，每批最多 25 MB。" });
+        else if (error instanceof BatchInputError) sendJson(response, 400, { error: error.message });
+        else throw error;
+      } finally { response.off("close", abort); }
+      return true;
+    }
+  }
+
   if (
     request.method === "GET" &&
     url.pathname === "/api/candidate-intake/readiness"
@@ -220,6 +320,7 @@ export async function handleApi(
     sendJson(response, 200, candidateIntakeApplication.list(user.id, {
       page: Number(url.searchParams.get("page") ?? 1), search: url.searchParams.get("search") ?? "",
       resultsOnly: url.searchParams.get("resultsOnly") === "1",
+      matchCategory: url.searchParams.get("matchCategory") ?? undefined,
     }));
     return true;
   }
@@ -290,19 +391,7 @@ export async function handleApi(
     });
     if (result.kind === "accepted") {
       const parsing = await resumeParserApplication.parse(result.query.id, user.id);
-      const matching = parsing.kind === "profile" &&
-        (parsing.profile.parseStatus === "COMPLETE" || parsing.profile.parseStatus === "PARTIAL")
-        ? matchingApplication.run(result.query.id, user.id)
-        : null;
-      if (matching?.kind === "matched") {
-        auditApplication.record({
-          actorId: user.id,
-          actionType: "MATCH_RESULT_ACCESSED",
-          resourceRef: result.query.id,
-          outcome: "GENERATED",
-        });
-      }
-      sendJson(response, 200, { ...result, parsing, matching });
+      sendJson(response, 200, { ...result, parsing, matching: null });
     } else {
       sendJson(response, 200, result);
     }

@@ -1,7 +1,8 @@
 import { WorkspaceHeader } from "@/components/workspace-header";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/client/api";
+import { copyText } from "@/client/clipboard";
 import type { AuthenticatedUser } from "@/modules/auth/domain/user";
 import type { CandidateReadiness } from "@/modules/candidate-intake/domain/models";
 import type {
@@ -41,6 +42,12 @@ export function ResultsPage({
   const [loadError, setLoadError] = useState<"unavailable" | "match_failed" | null>(null);
   const [retryPending, setRetryPending] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,12 +100,15 @@ export function ResultsPage({
   }
 
   async function copyEmail(email: string) {
+    setCopyError(false);
+    setCopiedEmail(null);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
     try {
-      await navigator.clipboard.writeText(email);
+      await copyText(email);
       setCopiedEmail(email);
-      window.setTimeout(() => setCopiedEmail((current) => current === email ? null : current), 1800);
+      copyTimer.current = setTimeout(() => setCopiedEmail(null), 1800);
     } catch {
-      setCopiedEmail(null);
+      setCopyError(true);
     }
   }
 
@@ -187,6 +197,8 @@ export function ResultsPage({
             ))}
           </div>
         )}
+
+        {copyError ? <p className="form-error" role="alert">邮箱复制失败，请手动复制卡片中的邮箱。</p> : null}
 
         {run ? (
           <footer className="result-version-footer">

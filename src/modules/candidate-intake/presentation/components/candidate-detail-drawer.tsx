@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Network, FileText, ExternalLink, Building2, GraduationCap } from "lucide-react";
 import { api, type CandidateDetail } from "@/client/api";
+import { copyText } from "@/client/clipboard";
 import { groupMatchResults } from "@/modules/results/domain/group-results";
 import { ConfidenceGroup } from "@/modules/results/presentation/components/confidence-group";
 import { CandidateProfilePreview } from "./candidate-profile-preview";
@@ -31,11 +32,12 @@ export function CandidateDetailDrawer({ queryId, onClose }: { queryId: string; o
   }, [queryId]);
 
   async function copyEmail(email: string) {
+    setCopyError(false);
+    setCopiedEmail(null);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
     try {
-      await navigator.clipboard.writeText(email);
-      setCopyError(false);
+      await copyText(email, dialog.current ?? undefined);
       setCopiedEmail(email);
-      if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopiedEmail(null), 1800);
     } catch { setCopyError(true); }
   }

@@ -2,7 +2,7 @@ import type { AuthenticatedUser } from "@/modules/auth/domain/user";
 import type { SubmitCandidateResult } from "@/modules/candidate-intake/application/submit-candidate";
 import type { CandidateReadiness } from "@/modules/candidate-intake/domain/models";
 import type { CandidateQuery } from "@/modules/candidate-intake/domain/models";
-import type { CandidateQueryPage } from "@/modules/candidate-intake/domain/models";
+import type { CandidateMatchCategory, CandidateQueryPage } from "@/modules/candidate-intake/domain/models";
 import type { EmployeeDataOverview } from "@/modules/employee-data/domain/models";
 import type { EmployeeDirectoryPage, EmployeeProfile } from "@/modules/employee-data/domain/models";
 import type { ImportActionState } from "@/modules/employee-data/presentation/contracts";
@@ -10,6 +10,8 @@ import type { RunMatchingResult } from "@/modules/matching/application/run-match
 import type { MatchRun } from "@/modules/matching/domain/models";
 import type { ParseCandidateQueryResult } from "@/modules/resume-parser/application/parse-candidate-query";
 import type { CandidateProfile } from "@/modules/resume-parser/domain/models";
+import type { AiStatus, ChatMessage } from "@/modules/enterprise-ai/domain/models";
+import type { BatchEvent } from "@/modules/candidate-batch/domain/models";
 
 export type CandidateSubmissionResult =
   | {
@@ -47,8 +49,28 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  candidates(page = 1, search = "", resultsOnly = false): Promise<CandidateQueryPage> {
+  importCandidateWorkbook(file: File, matchAfterImport: boolean, onEvent: (event: BatchEvent) => void, signal?: AbortSignal) {
+    const form = new FormData();
+    form.set("workbook", file);
+    form.set("matchAfterImport", String(matchAfterImport));
+    return readBatchStream("/api/candidate-batch/workbook", { method: "POST", body: form, signal }, onEvent);
+  },
+  aiStatus(): Promise<AiStatus> { return request("/api/enterprise-ai/status"); },
+  askAi(messages: ChatMessage[], signal?: AbortSignal): Promise<ChatMessage> {
+    return request("/api/enterprise-ai/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages }), signal });
+  },
+  importCandidates(files: File[], matchAfterImport: boolean, onEvent: (event: BatchEvent) => void, signal?: AbortSignal) {
+    const form = new FormData();
+    files.forEach((file) => form.append("resumeFiles", file));
+    form.set("matchAfterImport", String(matchAfterImport));
+    return readBatchStream("/api/candidate-batch/import", { method: "POST", body: form, signal }, onEvent);
+  },
+  matchCandidates(queryIds: string[], onEvent: (event: BatchEvent) => void, signal?: AbortSignal) {
+    return readBatchStream("/api/candidate-batch/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queryIds }), signal }, onEvent);
+  },
+  candidates(page = 1, search = "", resultsOnly = false, matchCategory?: CandidateMatchCategory): Promise<CandidateQueryPage> {
     const params = new URLSearchParams({ page: String(page), search, resultsOnly: resultsOnly ? "1" : "0" });
+    if (matchCategory) params.set("matchCategory", matchCategory);
     return request(`/api/candidate-intake/queries?${params}`);
   },
 
@@ -149,3 +171,34 @@ export const api = {
     return result.run;
   },
 };
+
+async function readBatchStream(url: string, options: RequestInit, onEvent: (event: BatchEvent) => void): Promise<void> {
+  const response = await fetch(url, { credentials: "same-origin", ...options });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    throw new ApiError(response.status, payload?.error ?? "批量处理请求失败，请重试。");
+  }
+  if (!response.body) throw new Error("无法读取处理进度，请检查候选人库。");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      let newline: number;
+      while ((newline = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (!line.trim()) continue;
+        const event = JSON.parse(line) as BatchEvent;
+        if (event.type === "error") throw new Error(event.message);
+        if (event.type === "done") finished = true;
+        onEvent(event);
+      }
+      if (chunk.done) break;
+    }
+    if (!finished) throw new Error("连接中断，已保存的候选人可在简历库查看；请勿重复导入。");
+  } finally { reader.releaseLock(); }
+}

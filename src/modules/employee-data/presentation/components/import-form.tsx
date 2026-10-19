@@ -35,7 +35,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
       <div className="section-heading">
         <div>
           <p className="eyebrow">上传新版本</p>
-          <h2>导入员工履历</h2>
+          <h2>批量导入员工履历</h2>
         </div>
         <a className="secondary-link" href="/api/admin/employee-data/template">
           下载标准模板
@@ -44,13 +44,14 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
       <form className="import-form" onSubmit={submit}>
         <label className="file-drop" htmlFor="employeeFile">
           <strong>选择 Excel 文件</strong>
-          <span>仅支持 .xlsx，最大 10 MB；上传后先校验，全部通过才会生效。</span>
+          <span>一份 .xlsx 可导入最多 10,000 位员工，最大 10 MB；全部校验通过后生效。</span>
           <input id="employeeFile" name="employeeFile" type="file" accept=".xlsx" required />
         </label>
         <button className="primary-button" disabled={pending} type="submit">
           {pending ? "正在校验并发布…" : "校验并发布新版本"}
         </button>
       </form>
+      <p className="schema-note">请上传完整员工名单：成功发布后，新版本将整体替代当前匹配用的员工数据；未包含的员工不会进入后续匹配。旧版本保留供复核。</p>
       {state.status !== "idle" ? (
         <section
           className={`import-result import-result-${state.status}`}

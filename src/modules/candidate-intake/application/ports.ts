@@ -3,6 +3,7 @@ import type {
   CandidateReadiness,
   CandidateSourcePayload,
   CandidateQueryPage,
+  CandidateMatchCategory,
 } from "../domain/models";
 
 export interface CandidateActor {
@@ -11,7 +12,7 @@ export interface CandidateActor {
 }
 
 export interface CandidateLibraryRepository {
-  list(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean): CandidateQueryPage;
+  list(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory): CandidateQueryPage;
   find(queryId: string, requestedBy: string, now: string): CandidateQuery | null;
 }
 

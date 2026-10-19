@@ -11,6 +11,8 @@ import { CandidateLibraryPage } from "@/modules/candidate-intake/presentation/pa
 import { CandidateDetailPage } from "@/modules/candidate-intake/presentation/pages/candidate-detail-page";
 import { EmployeeDataPage } from "@/modules/employee-data/presentation/pages/employee-data-page";
 import { ResultsPage } from "@/modules/results/presentation/pages/results-page";
+import { AiAssistant } from "@/modules/enterprise-ai/presentation/ai-assistant";
+import { BatchImportPage } from "@/modules/candidate-batch/presentation/batch-import-page";
 
 function navigate(path: string): void {
   window.history.pushState({}, "", path);
@@ -60,37 +62,45 @@ export default function App() {
       />
     );
   }
-  if (path === "/admin/employee-data") {
-    return hasPermission(user, "employee-data:import")
-      ? <EmployeeDataPage user={user} onLogout={logout} />
-      : <ForbiddenPage />;
+  function renderAuthenticatedPage(user: AuthenticatedUser) {
+    if (path === "/candidates/import") {
+      return hasPermission(user, "candidate:query")
+        ? <BatchImportPage user={user} onLogout={logout} />
+        : <ForbiddenPage />;
+    }
+    if (path === "/admin/employee-data") {
+      return hasPermission(user, "employee-data:import")
+        ? <EmployeeDataPage user={user} onLogout={logout} />
+        : <ForbiddenPage />;
+    }
+    if (path === "/candidate/new") {
+      return hasPermission(user, "candidate:query")
+        ? <CandidateIntakePage user={user} onLogout={logout} />
+        : <ForbiddenPage />;
+    }
+    if (path === "/candidates" || path === "/results") {
+      return hasPermission(user, "candidate:query")
+        ? <CandidateLibraryPage key={path} user={user} onLogout={logout} resultsOnly={path === "/results"} />
+        : <ForbiddenPage />;
+    }
+    const candidateRoute = path.match(/^\/candidates\/([^/]+)$/u);
+    if (candidateRoute) {
+      return hasPermission(user, "candidate:query")
+        ? <CandidateDetailPage key={path} queryId={decodeURIComponent(candidateRoute[1])} user={user} onLogout={logout} />
+        : <ForbiddenPage />;
+    }
+    const resultRoute = path.match(/^\/results\/([^/]+)$/u);
+    if (resultRoute) {
+      return hasPermission(user, "candidate:query")
+        ? <ResultsPage queryId={decodeURIComponent(resultRoute[1])} user={user} onLogout={logout} />
+        : <ForbiddenPage />;
+    }
+    if (path === "/admin") {
+      return hasPermission(user, "employee-data:import")
+        ? <AdminAccessPage user={user} />
+        : <ForbiddenPage />;
+    }
+    return <DashboardPage user={user} onLogout={logout} />;
   }
-  if (path === "/candidate/new") {
-    return hasPermission(user, "candidate:query")
-      ? <CandidateIntakePage user={user} onLogout={logout} />
-      : <ForbiddenPage />;
-  }
-  if (path === "/candidates" || path === "/results") {
-    return hasPermission(user, "candidate:query")
-      ? <CandidateLibraryPage key={path} user={user} onLogout={logout} resultsOnly={path === "/results"} />
-      : <ForbiddenPage />;
-  }
-  const candidateRoute = path.match(/^\/candidates\/([^/]+)$/u);
-  if (candidateRoute) {
-    return hasPermission(user, "candidate:query")
-      ? <CandidateDetailPage key={path} queryId={decodeURIComponent(candidateRoute[1])} user={user} onLogout={logout} />
-      : <ForbiddenPage />;
-  }
-  const resultRoute = path.match(/^\/results\/([^/]+)$/u);
-  if (resultRoute) {
-    return hasPermission(user, "candidate:query")
-      ? <ResultsPage queryId={decodeURIComponent(resultRoute[1])} user={user} onLogout={logout} />
-      : <ForbiddenPage />;
-  }
-  if (path === "/admin") {
-    return hasPermission(user, "employee-data:import")
-      ? <AdminAccessPage user={user} />
-      : <ForbiddenPage />;
-  }
-  return <DashboardPage user={user} onLogout={logout} />;
+  return <>{renderAuthenticatedPage(user)}<AiAssistant key={user.id} /></>;
 }

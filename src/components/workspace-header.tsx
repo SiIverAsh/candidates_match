@@ -30,6 +30,7 @@ export function WorkspaceHeader({ user, onLogout, children }: {
       <div className="ats-header-title"><strong>{title}</strong><span className="ats-feature"><Network size={12} />内部人脉匹配</span></div>
       <div className="ats-header-actions">
         {children}
+        <a className="secondary-link batch-header-link" href="/candidates/import">批量导入</a>
         <a className="button-link" href="/candidate/new"><Plus size={15} />添加简历</a>
         <div className="account-area"><span className="account-avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span><div className="account-copy"><strong>{user.displayName}</strong><span>{user.role === "HR_ADMIN" ? "管理员" : "招聘人员"}</span></div></div>
       </div>

@@ -3,7 +3,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { CandidateActor } from "../../application/ports";
-import type { CandidateQuery, CandidateQueryPage, CandidateQuerySummary, CandidateSourcePayload } from "../../domain/models";
+import type { CandidateMatchCategory, CandidateQuery, CandidateQueryPage, CandidateQuerySummary, CandidateSourcePayload } from "../../domain/models";
 
 const globalForCandidateIntake = globalThis as unknown as {
   candidateIntakeDatabase?: DatabaseSync;
@@ -153,7 +153,7 @@ export function findCandidateQuery(queryId: string, requestedBy: string, now: st
   return row ? queryFromRow(row) : null;
 }
 
-export function listCandidateQueries(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean): CandidateQueryPage {
+export function listCandidateQueries(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory): CandidateQueryPage {
   const database = getDatabase();
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
   const hasProfiles = tables.has("candidate_profiles");
@@ -163,9 +163,18 @@ export function listCandidateQueries(requestedBy: string, now: string, page: num
     hasProfiles ? "LEFT JOIN candidate_profiles p ON p.query_id = q.id AND p.submitted_by = q.submitted_by AND p.expires_at > ?" : "",
     hasRuns ? "LEFT JOIN match_runs m ON m.query_id = q.id AND m.submitted_by = q.submitted_by AND m.expires_at > ?" : "",
   ].join(" ");
-  const where = `q.submitted_by = ? AND q.expires_at > ? AND (instr(lower(COALESCE(${name}, '')), lower(?)) > 0 OR instr(lower(q.id), lower(?)) > 0) ${resultsOnly ? hasRuns ? "AND m.id IS NOT NULL AND m.expires_at > ?" : "AND 0" : ""}`;
-  const params = [...(hasProfiles ? [now] : []), ...(hasRuns ? [now] : []), requestedBy, now, search, search, ...(resultsOnly && hasRuns ? [now] : [])];
-  const count = database.prepare(`SELECT COUNT(*) AS total FROM candidate_queries q ${joins} WHERE ${where}`).get(...params) as { total: number };
+  const baseWhere = `q.submitted_by = ? AND q.expires_at > ? AND (instr(lower(COALESCE(${name}, '')), lower(?)) > 0 OR instr(lower(q.id), lower(?)) > 0)`;
+  const available = hasRuns ? "m.id IS NOT NULL AND m.status = 'COMPLETED' AND m.result_count > 0" : "0";
+  const unavailable = hasRuns ? `m.id IS NOT NULL AND NOT (${available})` : "0";
+  const categoryWhere = matchCategory === "FOUND" ? available : matchCategory === "NOT_FOUND" ? unavailable : hasRuns ? "m.id IS NOT NULL" : "0";
+  const where = `${baseWhere}${resultsOnly ? ` AND (${categoryWhere})` : ""}`;
+  const params = [...(hasProfiles ? [now] : []), ...(hasRuns ? [now] : []), requestedBy, now, search, search];
+  const count = database.prepare(`SELECT COUNT(*) AS total,
+    COALESCE(SUM(CASE WHEN ${available} THEN 1 ELSE 0 END), 0) AS found,
+    COALESCE(SUM(CASE WHEN ${unavailable} THEN 1 ELSE 0 END), 0) AS not_found
+    FROM candidate_queries q ${joins} WHERE ${baseWhere}`).get(...params) as { total: number; found: number; not_found: number };
+  const resultCounts = { found: Number(count.found), notFound: Number(count.not_found) };
+  const total = resultsOnly ? matchCategory === "FOUND" ? resultCounts.found : matchCategory === "NOT_FOUND" ? resultCounts.notFound : resultCounts.found + resultCounts.notFound : Number(count.total);
   const pageSize = 20;
   const rows = database.prepare(`
     SELECT q.id, q.submitted_by, q.submitted_at, q.employee_version_id, q.source_type, q.source_format, q.status, q.expires_at, ${name} AS candidate_name, ${hasProfiles ? "p.parse_status" : "NULL"} AS parse_status,
@@ -174,7 +183,7 @@ export function listCandidateQueries(requestedBy: string, now: string, page: num
     FROM candidate_queries q ${joins} WHERE ${where}
     ORDER BY q.submitted_at DESC, q.id DESC LIMIT ? OFFSET ?
   `).all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
-  return { total: Number(count.total), page, pageSize, items: rows.map((row): CandidateQuerySummary => ({
+  return { total, page, pageSize, resultCounts, items: rows.map((row): CandidateQuerySummary => ({
     ...queryFromRow(row), candidateName: row.candidate_name as string | null,
     parseStatus: row.parse_status as CandidateQuerySummary["parseStatus"],
     matching: row.match_status ? { status: row.match_status as NonNullable<CandidateQuerySummary["matching"]>["status"], resultCount: Number(row.result_count), createdAt: String(row.matched_at) } : null,

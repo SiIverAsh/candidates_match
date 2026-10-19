@@ -1,4 +1,4 @@
-import { candidateExpiry, validateCandidateText } from "../domain/policies";
+import { candidateExpiry, validateCandidateText, type CandidateTextOrigin } from "../domain/policies";
 import type { CandidateQuery, CandidateSourcePayload } from "../domain/models";
 import type {
   CandidateActor,
@@ -10,6 +10,7 @@ export interface SubmitCandidateCommand {
   actor: CandidateActor;
   file: CandidateFileInput | null;
   text: string | null;
+  textOrigin?: CandidateTextOrigin;
 }
 
 export type SubmitCandidateResult =
@@ -41,7 +42,7 @@ export async function submitCandidate(
     }
     payload = prepared.payload;
   } else {
-    const validation = validateCandidateText(command.text ?? "");
+    const validation = validateCandidateText(command.text ?? "", command.textOrigin);
     if (!validation.ok) {
       return { kind: "rejected", code: validation.code, message: validation.message };
     }

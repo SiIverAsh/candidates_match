@@ -1,4 +1,6 @@
 export type AuditActionType =
+  | "AI_CHAT"
+  | "CANDIDATE_BATCH"
   | "LOGIN"
   | "LOGOUT"
   | "ACCESS_DENIED"

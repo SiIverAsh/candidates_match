@@ -16,14 +16,16 @@ export type CandidateTextValidation =
   | { ok: true; text: string }
   | { ok: false; code: CandidateTextIssueCode; message: string };
 
+export type CandidateTextOrigin = "RESUME" | "WORKBOOK_ROW";
+
 const RESUME_SIGNAL = /(?:工作经历|任职|公司|职位|教育经历|学历|学校|大学|学院|专业|experience|employment|company|education|university|college|school)/iu;
 
-export function validateCandidateText(input: string): CandidateTextValidation {
+export function validateCandidateText(input: string, origin: CandidateTextOrigin = "RESUME"): CandidateTextValidation {
   const text = input.replaceAll("\u0000", "").trim();
   if (!text) {
     return { ok: false, code: "TEXT_REQUIRED", message: "请粘贴候选人简历文本。" };
   }
-  if (text.length < CANDIDATE_INTAKE_POLICY.minTextCharacters) {
+  if (origin === "RESUME" && text.length < CANDIDATE_INTAKE_POLICY.minTextCharacters) {
     return {
       ok: false,
       code: "TEXT_TOO_SHORT",
