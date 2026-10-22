@@ -3,7 +3,7 @@ export const CANDIDATE_INTAKE_POLICY = {
   minTextCharacters: 80,
   maxTextCharacters: 100_000,
   retentionDays: 7,
-  allowedExtensions: ["pdf", "docx", "txt"],
+  allowedExtensions: ["pdf", "doc", "docx", "txt"],
 } as const;
 
 export type CandidateTextIssueCode =
@@ -18,7 +18,7 @@ export type CandidateTextValidation =
 
 export type CandidateTextOrigin = "RESUME" | "WORKBOOK_ROW";
 
-const RESUME_SIGNAL = /(?:工作经历|任职|公司|职位|教育经历|学历|学校|大学|学院|专业|experience|employment|company|education|university|college|school)/iu;
+const RESUME_SIGNAL = /(?:工作经历|任职|公司|职位|教育经历|学历|学校|大学|学院|专业|experience|employment|company|education|university|college|school|career|professional history|work history|academic background|institution|internship|bachelor|master|\b(?:engineer|developer|analyst|manager|scientist|consultant|intern)\b)/iu;
 
 export function validateCandidateText(input: string, origin: CandidateTextOrigin = "RESUME"): CandidateTextValidation {
   const text = input.replaceAll("\u0000", "").trim();

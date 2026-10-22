@@ -14,6 +14,7 @@ import {
 } from "../../domain/group-results";
 
 import { ConfidenceGroup } from "../components/confidence-group";
+import { ResearchFunctionSummary } from "@/modules/research-functions/presentation/research-function-summary";
 
 interface ResultsState {
   profile: CandidateProfile;
@@ -123,7 +124,7 @@ export function ResultsPage({
           <p className="eyebrow">结果不可用</p>
           <h1>查询不存在、已过期或无权访问</h1>
           <p>安全查询引用：<code>{queryId}</code>。候选人数据到期后不可恢复，请重新提交资料。</p>
-          <a className="button-link" href="/candidate/new">开始新查询</a>
+          <a className="button-link" href="/candidates/new">开始新查询</a>
         </section>
       </main>
     );
@@ -141,7 +142,7 @@ export function ResultsPage({
       <WorkspaceHeader user={user} onLogout={onLogout} />
 
       <section className="results-workspace">
-        <div className="table-actions"><a className="back-link" href="/results">← 返回结果历史</a><a href={`/candidates/${encodeURIComponent(queryId)}`}>候选人资料预览</a><a href="/candidate/new">新建查询</a></div>
+        <div className="table-actions"><a className="back-link" href="/results">← 返回结果历史</a><a href={`/candidates/${encodeURIComponent(queryId)}`}>候选人资料预览</a><a href="/candidates/new">新建查询</a></div>
         <header className="results-heading">
           <div>
             <p className="eyebrow">可解释结果</p>
@@ -162,6 +163,8 @@ export function ResultsPage({
           <strong>请审慎使用推荐</strong>
           <p>以下结果是基于共同经历的推断，表示员工可能认识候选人，不代表双方确定认识。</p>
         </section>
+
+        <ResearchFunctionSummary assessment={run?.candidateFunctions ?? profile.researchFunctions} queryId={queryId} />
 
         {profile.parseStatus === "PARTIAL" ? (
           <section className="parse-warning" role="status">
@@ -188,7 +191,7 @@ export function ResultsPage({
           <section className="result-empty">
             <h2>未找到具有可核验证据的内部同事</h2>
             <p>系统没有用无依据或仅语义相似的员工补齐结果。你可以补充候选人的公司、学校和时间信息后重新查询。</p>
-            <a className="button-link" href="/candidate/new">补充并重新查询</a>
+            <a className="button-link" href="/candidates/new">补充并重新查询</a>
           </section>
         ) : (
           <div className="confidence-groups">

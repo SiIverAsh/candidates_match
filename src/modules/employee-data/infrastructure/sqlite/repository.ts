@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { registerTextSearch } from "../../../../shared/infrastructure/sqlite/text-search";
 
 import type { ImportActor, ImportFailureCode } from "../../application/ports";
 
@@ -26,6 +27,7 @@ function getDatabase(): DatabaseSync {
     const database = new DatabaseSync(filePath);
     database.exec("PRAGMA foreign_keys = ON");
     database.exec("PRAGMA journal_mode = WAL");
+    registerTextSearch(database);
     database.exec(`
       CREATE TABLE IF NOT EXISTS employee_data_versions (
         id TEXT PRIMARY KEY,
@@ -93,6 +95,8 @@ function getDatabase(): DatabaseSync {
       CREATE INDEX IF NOT EXISTS employee_import_attempts_recent
         ON employee_import_attempts(attempted_at DESC);
       CREATE INDEX IF NOT EXISTS employees_by_version ON employees(version_id);
+      CREATE INDEX IF NOT EXISTS work_experiences_by_employee ON work_experiences(version_id, employee_id);
+      CREATE INDEX IF NOT EXISTS education_experiences_by_employee ON education_experiences(version_id, employee_id);
     `);
     globalForEmployeeData.employeeDataDatabase = database;
   }
@@ -108,9 +112,13 @@ export function listCurrentEmployees(page: number, search: string): EmployeeDire
   const version = getEmployeeDataOverview().activeVersion;
   const pageSize = 20;
   if (!version) return { versionId: null, items: [], total: 0, page, pageSize };
-  const where = "version_id = ? AND (instr(lower(name || ' ' || employee_id || ' ' || email || ' ' || current_department || ' ' || current_title), lower(?)) > 0)";
-  const count = database.prepare(`SELECT COUNT(*) AS total FROM employees WHERE ${where}`).get(version.id, search) as { total: number };
-  const rows = database.prepare(`SELECT * FROM employees WHERE ${where} ORDER BY employee_id LIMIT ? OFFSET ?`).all(version.id, search, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
+  const searchWhere = search ? ` AND text_search_matches(?, e.name, e.employee_id, e.email, e.current_department, e.current_title,
+    (SELECT group_concat(w.company || char(31) || w.title, char(31)) FROM work_experiences w WHERE w.version_id = e.version_id AND w.employee_id = e.employee_id),
+    (SELECT group_concat(d.school || char(31) || d.major, char(31)) FROM education_experiences d WHERE d.version_id = e.version_id AND d.employee_id = e.employee_id))` : "";
+  const where = `e.version_id = ?${searchWhere}`;
+  const params = [version.id, ...(search ? [search] : [])];
+  const count = database.prepare(`SELECT COUNT(*) AS total FROM employees e WHERE ${where}`).get(...params) as { total: number };
+  const rows = database.prepare(`SELECT e.* FROM employees e WHERE ${where} ORDER BY e.employee_id LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
   return { versionId: version.id, items: rows.map(employeeFromRow), total: Number(count.total), page, pageSize };
 }
 

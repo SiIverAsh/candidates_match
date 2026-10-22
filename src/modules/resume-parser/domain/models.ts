@@ -1,3 +1,5 @@
+import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
+
 export type ParseStatus = "COMPLETE" | "PARTIAL" | "INSUFFICIENT" | "FAILED";
 export type DatePrecision = "DAY" | "MONTH" | "YEAR" | "UNKNOWN";
 export type NormalizationConfidence = "HIGH" | "MEDIUM" | "LOW";
@@ -23,6 +25,7 @@ export interface CandidateWorkExperience {
   sequence: number;
   company: NormalizedValue;
   rawTitle: string | null;
+  description?: string;
   normalizedFunction: NormalizedValue;
   dates: ExperienceDateRange;
 }
@@ -53,6 +56,7 @@ export interface CandidateProfile {
   warnings: string[];
   workExperiences: CandidateWorkExperience[];
   educations: CandidateEducationExperience[];
+  researchFunctions?: ResearchFunctionAssessment;
   parserVersion: string;
   normalizerVersion: string;
   parsedAt: string;
@@ -63,7 +67,7 @@ export interface ResumeSource {
   queryId: string;
   submittedBy: string;
   sourceType: "FILE" | "TEXT";
-  sourceFormat: "plain-text" | "pdf" | "docx" | "txt";
+  sourceFormat: "plain-text" | "pdf" | "doc" | "docx" | "txt";
   text: string | null;
   bytes: Uint8Array | null;
   expiresAt: string;

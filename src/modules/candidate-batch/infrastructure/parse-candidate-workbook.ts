@@ -98,7 +98,6 @@ export const candidateWorkbookParser: CandidateWorkbookParser = {
         }
         if (!hasContent) return;
         rows.push({ ...prepareWorkbookRow(rowNumber, assembleWorkbookValues(cells), error), sheetName: sheet.name });
-        if (rows.length > CANDIDATE_WORKBOOK_LIMITS.maxRows) throw new BatchInputError("每个 Excel 最多 1,000 位候选人，请拆分后导入。");
       });
     }
     if (!rows.length) throw new BatchInputError("Excel 中没有候选人记录，请在表头下方填写数据。");

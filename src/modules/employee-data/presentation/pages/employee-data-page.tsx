@@ -69,7 +69,7 @@ export function EmployeeDataPage({
       <WorkspaceHeader user={user} onLogout={onLogout} />
       <div className="admin-layout">
         <aside className="admin-sidebar" aria-label="管理员导航">
-          <a href="/">← 返回工作台</a>
+          <a href="/candidates/new">← 返回人脉匹配</a>
           <div><p className="eyebrow">数据管理</p><strong>员工数据版本</strong></div>
           <p>只有最近一次成功发布的版本会进入后续匹配流程。</p>
         </aside>

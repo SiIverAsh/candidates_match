@@ -10,7 +10,7 @@ import { candidateWorkbookParser } from "./infrastructure/parse-candidate-workbo
 
 const dependencies: BatchDependencies = {
   submit: candidateIntakeApplication.submit,
-  parse: resumeParserApplication.parse,
+  parse: resumeParserApplication.ensureProfile,
   match: matchingApplication.run,
   findQuery: candidateIntakeApplication.getQuery,
   findProfile: resumeParserApplication.getProfile,

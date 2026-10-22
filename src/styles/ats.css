@@ -61,6 +61,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
 .history-panel, .version-card, .import-panel, .schema-panel, .query-card, .query-success, .privacy-panel, .profile-preview { border-radius: 8px; padding: 20px; box-shadow: none; }
 .section-heading h2, .schema-panel h2 { font-size: 16px; }
 .data-table { font-size: 12px; }
+.library-search-hint { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; color: #64748b; font-size: 11px; line-height: 1.8; }
+.ats-candidate-panel > .library-search-hint { margin: 0; padding: 10px 18px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+.library-search input[type="search"] { min-width: 0; }
 .data-table th { color: #64748b; background: #f8fafc; font-weight: 500; }
 .data-table th, .data-table td { padding: 12px 14px; }
 .admin-layout { grid-template-columns: 240px minmax(0, 1fr); }

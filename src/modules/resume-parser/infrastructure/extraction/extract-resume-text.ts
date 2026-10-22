@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { extractDocText } from "../../../../shared/infrastructure/word/extract-doc-text";
 
 import type { TextExtractionResult } from "../../application/ports";
 import type { ResumeSource } from "../../domain/models";
@@ -37,13 +38,30 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      let pageText = "";
+      const viewport = page.getViewport({ scale: 1 });
+      const positioned: Array<{ text: string; x: number; y: number; width: number; height: number }> = [];
       for (const item of content.items) {
-        if (!("str" in item)) continue;
-        pageText += item.str;
-        pageText += item.hasEOL ? "\n" : " ";
+        if (!("str" in item) || !item.str.trim()) continue;
+        const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+        positioned.push({ text: item.str, x, y, width: item.width, height: item.height });
       }
-      pages.push(pageText);
+      positioned.sort((left, right) => left.y - right.y || left.x - right.x);
+      const rows: Array<{ y: number; height: number; items: typeof positioned }> = [];
+      for (const item of positioned) {
+        const row = rows.at(-1);
+        if (row && Math.abs(item.y - row.y) <= Math.max(2, Math.min(row.height, item.height) * 0.3)) row.items.push(item);
+        else rows.push({ y: item.y, height: item.height, items: [item] });
+      }
+      pages.push(rows.map(row => {
+        row.items.sort((left, right) => left.x - right.x);
+        return row.items.map((item, index) => {
+          const previous = row.items[index - 1];
+          if (!previous) return item.text;
+          const gap = item.x - previous.x - previous.width;
+          const space = gap > Math.max(previous.height, item.height) * 0.8 ? "   " : gap > 0.5 ? " " : "";
+          return space + item.text;
+        }).join("");
+      }).join("\n"));
       page.cleanup();
     }
   } finally {
@@ -68,7 +86,8 @@ export async function extractResumeText(source: ResumeSource): Promise<TextExtra
     else if (!source.bytes) throw new Error("SOURCE_BYTES_MISSING");
     else if (source.sourceFormat === "txt") {
       text = new TextDecoder("utf-8", { fatal: true }).decode(source.bytes);
-    } else if (source.sourceFormat === "docx") text = await extractDocx(source.bytes);
+    } else if (source.sourceFormat === "doc") text = await extractDocText(source.bytes);
+    else if (source.sourceFormat === "docx") text = await extractDocx(source.bytes);
     else if (source.sourceFormat === "pdf") text = await extractPdf(source.bytes);
     else throw new Error("UNSUPPORTED_SOURCE_FORMAT");
 

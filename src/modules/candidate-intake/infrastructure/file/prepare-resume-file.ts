@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { extractDocText } from "../../../../shared/infrastructure/word/extract-doc-text";
 
 import type {
   CandidateFileInput,
@@ -8,6 +9,7 @@ import { CANDIDATE_INTAKE_POLICY, validateCandidateText } from "../../domain/pol
 
 const MIME_TYPES: Record<string, string[]> = {
   pdf: ["application/pdf"],
+  doc: ["application/msword", "application/doc", "application/vnd.ms-word"],
   docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   txt: ["text/plain"],
 };
@@ -37,6 +39,17 @@ async function isDocx(bytes: Uint8Array): Promise<boolean> {
   }
 }
 
+async function isDoc(bytes: Uint8Array): Promise<boolean> {
+  const signature = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+  if (!signature.every((value, index) => bytes[index] === value)) return false;
+  try {
+    await extractDocText(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function prepareResumeFile(
   file: CandidateFileInput,
 ): Promise<CandidateFilePreparationResult> {
@@ -45,7 +58,7 @@ export async function prepareResumeFile(
     return {
       ok: false,
       code: "UNSUPPORTED_FILE_TYPE",
-      message: "仅支持 PDF、DOCX 或 UTF-8 TXT 文件。",
+      message: "仅支持 PDF、DOC、DOCX 或 UTF-8 TXT 文件。",
     };
   }
   if (file.size <= 0) {
@@ -80,6 +93,9 @@ export async function prepareResumeFile(
       return { ok: false, code: "CORRUPTED_PDF", message: "PDF 文件损坏或格式无效。" };
     }
   }
+  if (extension === "doc" && !(await isDoc(bytes))) {
+    return { ok: false, code: "CORRUPTED_DOC", message: "DOC 文件损坏、加密或格式无效，请另存为 DOCX 或粘贴简历文本。" };
+  }
   if (extension === "docx" && !(await isDocx(bytes))) {
     return { ok: false, code: "CORRUPTED_DOCX", message: "DOCX 文件损坏或格式无效。" };
   }
@@ -104,7 +120,7 @@ export async function prepareResumeFile(
     ok: true,
     payload: {
       sourceType: "FILE",
-      sourceFormat: extension as "pdf" | "docx" | "txt",
+      sourceFormat: extension as "pdf" | "doc" | "docx" | "txt",
       mimeType: acceptedMimes[0],
       bytes,
     },

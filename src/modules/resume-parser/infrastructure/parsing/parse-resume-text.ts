@@ -1,5 +1,7 @@
 import { DATE_RANGE_PATTERN, parseDateRange } from "../../domain/dates";
 import { hasEmploymentRole, inferEducationAt } from "../../domain/infer-education";
+import { englishEducationMajor, hasEnglishDegree, hasEnglishEmploymentRole, inferEnglishEducationAt, inferEnglishWorkAt } from "../../domain/english-experiences";
+import { EDUCATION_SECTION, EXPERIENCE_DESCRIPTION, OTHER_SECTION, WORK_SECTION, isResumeSection } from "../../domain/resume-sections";
 import type {
   CandidateEducationExperience,
   CandidateProfile,
@@ -14,21 +16,20 @@ import {
   normalizeSchool,
 } from "../../domain/normalization";
 
-export const PARSER_VERSION = "resume-heuristic-v6";
+export const PARSER_VERSION = "resume-heuristic-v10";
 
-interface WorkDraft { company: string | null; title: string | null; dates: string | null }
+interface WorkDraft { company: string | null; title: string | null; dates: string | null; description: string[] }
 interface EducationDraft { school: string | null; major: string | null; dates: string | null }
-type Section = "work" | "education" | null;
+type Section = "work" | "education" | "other" | null;
 
-const EMPTY_WORK = (): WorkDraft => ({ company: null, title: null, dates: null });
+const EMPTY_WORK = (): WorkDraft => ({ company: null, title: null, dates: null, description: [] });
 const EMPTY_EDUCATION = (): EducationDraft => ({ school: null, major: null, dates: null });
 
-const COMPANY_LABEL = /^(?:公司|单位|雇主|实习公司|实习单位|company|employer)\s*[:：]/iu;
+const COMPANY_LABEL = /^(?:公司|单位|雇主|实习公司|实习单位|company|employer|organi[sz]ation)\s*[:：]/iu;
 const EDUCATION_FIELD = /^(?:学位|学历|专业|主修|就读时间|教育时间|时间|日期|degree|qualification|major|field of study|period|date)\s*[:：]/iu;
 const INSTITUTION = /大学|学院|学校|中学|\b(?:university|college|institute|school|academy|polytechnic)\b/iu;
-const SECTION_HEADING = /^(?:工作经历|工作经验|职业经历|实习经历|教育经历|教育背景|学历|work experience|employment|education)\s*[:：]?\s*$/iu;
 const NARRATIVE_HEADING = /^(?:负责|参与|发表|完成|获得|published\b|led\b|conducted\b|developed\b|worked\b)/iu;
-const FIELD_LABEL = /^(?:姓名|候选人|公司|单位|雇主|实习公司|实习单位|职位|职务|岗位|实习职位|实习岗位|学校|院校|大学|专业|主修|任职时间|工作时间|实习时间|实习日期|就读时间|教育时间|时间|日期|name|candidate name|company|employer|title|position|role|school|university|college|major|field of study|period|date)\s*[:：]/iu;
+const FIELD_LABEL = /^(?:姓名|候选人|公司|单位|雇主|实习公司|实习单位|职位|职务|岗位|实习职位|实习岗位|学校|院校|大学|专业|主修|任职时间|工作时间|实习时间|实习日期|就读时间|教育时间|时间|日期|name|full name|candidate name|company|employer|organi[sz]ation|(?:job )?title|position|role|school|university|college|institution|major|field of study|degree|qualification|program(?:me)?|(?:employment |education |study )?(?:period|dates?)|duration|date range)\s*[:：]/iu;
 
 function resumeLines(text: string): string[] {
   return text.split(/\r?\n/gu).flatMap((line) => {
@@ -39,7 +40,7 @@ function resumeLines(text: string): string[] {
     let current = parts[0];
     for (let index = 1; index < parts.length; index += 2) {
       const rest = parts[index + 1];
-      if (FIELD_LABEL.test(rest.trimStart()) || SECTION_HEADING.test(rest.trim())) {
+      if (FIELD_LABEL.test(rest.trimStart()) || isResumeSection(rest.trim())) {
         lines.push(current);
         current = rest;
       } else current += parts[index] + rest;
@@ -55,7 +56,7 @@ function valueAfterLabel(line: string, labels: string): string | null {
 }
 
 function hasValue(draft: WorkDraft | EducationDraft): boolean {
-  return Object.values(draft).some(Boolean);
+  return Boolean(draft.dates || ("company" in draft ? draft.company || draft.title : draft.school || draft.major));
 }
 
 function compactParts(line: string): string[] {
@@ -75,6 +76,7 @@ function workExperience(draft: WorkDraft, sequence: number): CandidateWorkExperi
     sequence,
     company: normalizeCompany(draft.company),
     rawTitle: draft.title,
+    description: draft.description.join("\n"),
     normalizedFunction: normalizeFunction(draft.title),
     dates: parseDateRange(draft.dates),
   };
@@ -99,6 +101,8 @@ export function parseResumeText(
 ): CandidateProfile {
   let candidateName: string | null = null;
   let section: Section = null;
+  // Keep explicit headings separate from classifications inferred from individual rows.
+  let explicitSection: Section = null;
   let currentWork = EMPTY_WORK();
   let currentEducation = EMPTY_EDUCATION();
   const workDrafts: WorkDraft[] = [];
@@ -118,26 +122,40 @@ export function parseResumeText(
     let line = sourceLines[lineIndex];
     if (!line) continue;
 
-    const name = valueAfterLabel(line, "姓名|候选人|name|candidate name");
+    const name = valueAfterLabel(line, "姓名|候选人|name|full name|candidate name");
     if (name) { candidateName = name; continue; }
 
-    const workSection = line.match(/^(?:工作(?:与|及|和|\/|／)实习经历|工作经历|工作经验|职业经历|实习经历|实习经验|实习实践|实习|employment|work experience|professional experience|internship experience|internships?)(?=\s|[:：]|$|(?:19|20)\d{2})\s*[:：]?\s*(.*)$/iu);
+    const workSection = line.match(WORK_SECTION);
     if (workSection) {
       flushEducation();
       if (section === "work") flushWork();
       section = "work";
+      explicitSection = "work";
       line = workSection[1]?.trim() ?? "";
       if (!line) 
         continue;
     }
-    const educationSection = line.match(/^(?:教育经历|教育背景|学历|education)\s*[:：]?\s*(.*)$/iu);
+    const educationSection = line.match(EDUCATION_SECTION);
     if (educationSection) {
       flushWork();
       if (section === "education") flushEducation();
       section = "education";
+      explicitSection = "education";
       line = educationSection[1]?.trim() ?? "";
       if (!line) 
         continue;
+    }
+    if (OTHER_SECTION.test(line)) {
+      flushWork();
+      flushEducation();
+      section = "other";
+      explicitSection = "other";
+      continue;
+    }
+    if (section === "other") continue;
+    if (EXPERIENCE_DESCRIPTION.test(line)) {
+      if (section === "work" && currentWork.company) currentWork.description.push(line);
+      continue;
     }
 
     const numbered = line.match(/^(?:\d{1,3}[.．、)]|[（(]\d{1,3}[）)])[ \t]*(\S.*)$/u);
@@ -160,8 +178,31 @@ export function parseResumeText(
       if (FIELD_LABEL.test(heading) || looksLikeDateRange(heading)) line = heading;
     }
 
-    const inferredEducation = inferEducationAt([line, ...sourceLines.slice(lineIndex + 1, lineIndex + 4)], 0);
-    if (inferredEducation) {
+    // An unlabelled continuation belongs to the already identified employer or school.
+    if (!FIELD_LABEL.test(line) && !looksLikeDateRange(line)) {
+      if (section === "education" && currentEducation.school && !currentEducation.major && hasEnglishDegree(line) && compactParts(line).length === 1 && !INSTITUTION.test(line)) {
+        currentEducation.major = englishEducationMajor(line) ?? currentEducation.major;
+        continue;
+      }
+      if (section === "work" && currentWork.company && hasEnglishEmploymentRole(line) && compactParts(line).length === 1 && !/(?:\s+(?:at|@)\s+|,)/iu.test(line)) {
+        const nextLine = sourceLines.slice(lineIndex + 1, lineIndex + 5).find(next => next.length > 0) ?? "";
+        if (!currentWork.title || new RegExp(`^${DATE_RANGE_PATTERN}$`, "iu").test(nextLine)) {
+          if (currentWork.title) {
+            const company = currentWork.company;
+            flushWork();
+            currentWork.company = company;
+          }
+          currentWork.title = line;
+          continue;
+        }
+      }
+    }
+
+    const nearbyLines = [line, ...sourceLines.slice(lineIndex + 1, lineIndex + 4)];
+    const inferredEducation = explicitSection === "work" ? null
+      : inferEnglishEducationAt(nearbyLines, 0) ?? inferEducationAt(nearbyLines, 0);
+    const englishWorkWithoutDegree = section === "work" && inferredEducation && /^[A-Za-z]/u.test(inferredEducation.school) && !nearbyLines.some(hasEnglishDegree);
+    if (inferredEducation && !englishWorkWithoutDegree) {
       flushWork();
       flushEducation();
       section = "education";
@@ -170,16 +211,27 @@ export function parseResumeText(
       continue;
     }
 
+    const inferredWork = explicitSection === "education" ? null
+      : inferEnglishWorkAt(nearbyLines, 0, explicitSection === "work");
+    if (inferredWork) {
+      flushEducation();
+      flushWork();
+      section = "work";
+      currentWork = { company: inferredWork.company, title: inferredWork.title, dates: inferredWork.dates, description: [] };
+      lineIndex += inferredWork.lineCount - 1;
+      continue;
+    }
+
     const parts = compactParts(line);
     if (parts.length >= 3 && looksLikeDateRange(parts[0])) {
       // Explicit internship roles are employment even if a section heading was lost.
-      if (hasEmploymentRole(parts.slice(2).join(" "))) {
+      if (explicitSection !== "education" && hasEmploymentRole(parts.slice(2).join(" "))) {
         flushEducation();
         section = "work";
       }
       if (section === "work") {
         flushWork();
-        currentWork = { dates: parts[0], company: parts[1], title: parts.slice(2).join(" ") };
+        currentWork = { dates: parts[0], company: parts[1], title: parts.slice(2).join(" "), description: [] };
       } else if (section === "education") {
         flushEducation();
         currentEducation = { dates: parts[0], school: parts[1], major: parts.slice(2).join(" ") };
@@ -187,7 +239,7 @@ export function parseResumeText(
       continue;
     }
 
-    const company = valueAfterLabel(line, "公司|单位|雇主|实习公司|实习单位|company|employer");
+    const company = valueAfterLabel(line, "公司|单位|雇主|实习公司|实习单位|company|employer|organi[sz]ation");
     if (company) {
       if (currentWork.company) flushWork();
       flushEducation();
@@ -195,9 +247,9 @@ export function parseResumeText(
       currentWork.company = company;
       continue;
     }
-    const title = valueAfterLabel(line, "职位|职务|岗位|实习职位|实习岗位|title|position|role");
+    const title = valueAfterLabel(line, "职位|职务|岗位|实习职位|实习岗位|(?:job )?title|position|role");
     if (title) { section = "work"; currentWork.title = title; continue; }
-    const school = valueAfterLabel(line, "学校|院校|大学|school|university|college");
+    const school = valueAfterLabel(line, "学校|院校|大学|school|university|college|institution");
     if (school) {
       if (currentEducation.school) flushEducation();
       flushWork();
@@ -207,16 +259,30 @@ export function parseResumeText(
     }
     const major = valueAfterLabel(line, "专业|主修|major|field of study");
     if (major) { section = "education"; currentEducation.major = major; continue; }
+    const program = valueAfterLabel(line, "degree|qualification|program(?:me)?");
+    if (program && section === "education") {
+      const programMajor = englishEducationMajor(program);
+      if (programMajor) currentEducation.major = programMajor;
+      continue;
+    }
     const dates = valueAfterLabel(
       line,
       section === "education"
-        ? "就读时间|教育时间|时间|日期|period|date"
-        : "任职时间|工作时间|实习时间|实习日期|时间|日期|period|date",
+        ? "就读时间|教育时间|时间|日期|(?:education |study )?(?:period|dates?)|duration|date range"
+        : "任职时间|工作时间|实习时间|实习日期|时间|日期|(?:employment )?(?:period|dates?)|duration|date range",
     );
     if (dates) {
       if (section === "education") currentEducation.dates = dates;
       else { section = "work"; currentWork.dates = dates; }
+      continue;
     }
+    const standaloneDates = line.match(new RegExp(DATE_RANGE_PATTERN, "iu"));
+    if (standaloneDates?.[0] === line) {
+      if (section === "education" && hasValue(currentEducation)) currentEducation.dates = standaloneDates[0];
+      else if (section === "work" && hasValue(currentWork)) currentWork.dates = standaloneDates[0];
+      continue;
+    }
+    if (section === "work" && currentWork.company) currentWork.description.push(line);
   }
   flushWork();
   flushEducation();

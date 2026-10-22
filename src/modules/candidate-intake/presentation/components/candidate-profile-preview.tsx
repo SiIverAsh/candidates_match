@@ -25,6 +25,7 @@ export function CandidateProfilePreview({ profile }: { profile: CandidateProfile
                       <strong>{normalizedLabel(item.company)}</strong>
                       <span>{item.rawTitle ?? "职位未识别"}{item.normalizedFunction.value ? ` · ${item.normalizedFunction.value}` : ""}</span>
                       <small>{dateRangeLabel(item.dates)} · 精度 {item.dates.startPrecision}</small>
+                      {item.description ? <details><summary>工作职责与研究内容</summary><p style={{ whiteSpace: "pre-wrap" }}>{item.description}</p></details> : null}
                     </article>
                   )) : <p className="empty-copy">未识别到工作经历。</p>}
                 </div>

@@ -14,7 +14,7 @@ export interface SubmitCandidateCommand {
 }
 
 export type SubmitCandidateResult =
-  | { kind: "accepted"; query: CandidateQuery }
+  | { kind: "accepted"; query: CandidateQuery; reused?: boolean }
   | { kind: "rejected"; code: string; message: string }
   | { kind: "persistence_failed"; message: string };
 
@@ -63,8 +63,8 @@ export async function submitCandidate(
 
   try {
     dependencies.repository.purgeExpired(query.submittedAt);
-    dependencies.repository.create(query, payload, command.actor);
-    return { kind: "accepted", query };
+    const saved = dependencies.repository.createOrReuse(query, payload, command.actor);
+    return { kind: "accepted", ...saved };
   } catch {
     return { kind: "persistence_failed", message: "提交暂时无法保存，请稍后重试。" };
   }

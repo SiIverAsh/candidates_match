@@ -3,6 +3,7 @@ import type { SubmitCandidateResult } from "@/modules/candidate-intake/applicati
 import type { CandidateReadiness } from "@/modules/candidate-intake/domain/models";
 import type { CandidateQuery } from "@/modules/candidate-intake/domain/models";
 import type { CandidateMatchCategory, CandidateQueryPage } from "@/modules/candidate-intake/domain/models";
+import type { CandidateColumnFilters } from "@/modules/candidate-intake/domain/column-filters";
 import type { EmployeeDataOverview } from "@/modules/employee-data/domain/models";
 import type { EmployeeDirectoryPage, EmployeeProfile } from "@/modules/employee-data/domain/models";
 import type { ImportActionState } from "@/modules/employee-data/presentation/contracts";
@@ -17,6 +18,7 @@ export type CandidateSubmissionResult =
   | {
       kind: "accepted";
       query: CandidateQuery;
+      reused?: boolean;
       parsing: ParseCandidateQueryResult;
       matching: RunMatchingResult | null;
     }
@@ -68,9 +70,10 @@ export const api = {
   matchCandidates(queryIds: string[], onEvent: (event: BatchEvent) => void, signal?: AbortSignal) {
     return readBatchStream("/api/candidate-batch/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queryIds }), signal }, onEvent);
   },
-  candidates(page = 1, search = "", resultsOnly = false, matchCategory?: CandidateMatchCategory): Promise<CandidateQueryPage> {
+  candidates(page = 1, search = "", resultsOnly = false, matchCategory?: CandidateMatchCategory, filters?: CandidateColumnFilters): Promise<CandidateQueryPage> {
     const params = new URLSearchParams({ page: String(page), search, resultsOnly: resultsOnly ? "1" : "0" });
     if (matchCategory) params.set("matchCategory", matchCategory);
+    if (filters && Object.values(filters).some(value => value !== undefined)) params.set("filters", JSON.stringify(filters));
     return request(`/api/candidate-intake/queries?${params}`);
   },
 

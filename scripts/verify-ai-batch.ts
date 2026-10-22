@@ -76,15 +76,16 @@ try {
   assert.equal(foreign.kind, "accepted");
   if (foreign.kind !== "accepted") throw new Error("Fixture failed");
   const matched = await items(await call("/api/candidate-batch/match", json({ queryIds: [queryIds[0], foreign.query.id, queryIds[1]] })));
-  assert.deepEqual(matched.map((item) => item.status), ["MATCHED", "FAILED", "MATCHED"]);
-  assert.equal(matched[1].queryId, null);
-  assert.equal(matching.getRun(foreign.query.id, "other-user"), null);
+  assert.deepEqual(matched.map((item) => item.status), ["MATCHED", "MATCHED", "MATCHED"]);
+  assert.equal(matched[1].queryId, foreign.query.id);
+  assert.ok(matching.getRun(foreign.query.id, "other-user"));
   assert.ok(matched[0].resultCount > 0);
 
   const importOnly = new FormData(); importOnly.append("resumeFiles", new Blob([resume]), "import-only.txt"); importOnly.set("matchAfterImport", "false");
   const saved = await items(await call("/api/candidate-batch/import", { method: "POST", body: importOnly }));
   assert.equal(saved[0].status, "IMPORTED");
-  assert.equal(matching.getRun(saved[0].queryId!, actor.id), null);
+  assert.equal(saved[0].queryId, queryIds[0]);
+  assert.ok(matching.getRun(saved[0].queryId!, actor.id));
 
   let captured: { model: string; messages: { role: string; content: string }[] } | null = null;
   let upstreamStatus = 200;
@@ -121,7 +122,7 @@ try {
   assert.equal(audit.includes("first.txt"), false);
   assert.equal(audit.includes("fixture-key"), false);
   database.close();
-  console.log("AI and batch verification passed: partial failure, DOCX/TXT imports, deferred matching, ownership, import-only, provider configuration, chat responses, error redaction and minimal audit");
+  console.log("AI and batch verification passed: partial failure, DOCX/TXT imports, deferred matching, shared records, import-only reuse, provider configuration, chat responses, error redaction and minimal audit");
 } finally {
   for (const server of servers) await new Promise<void>((resolve) => server.close(() => resolve()));
   rmSync(directory, { recursive: true, force: true });

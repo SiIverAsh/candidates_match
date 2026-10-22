@@ -1,3 +1,5 @@
+import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
+
 export const BATCH_LIMITS = { maxFiles: 50, maxTotalBytes: 25 * 1024 * 1024, maxQueryIds: 200 } as const;
 
 export type BatchItemStatus = "IMPORTED" | "MATCHED" | "NO_RESULTS" | "NEEDS_DATA" | "NEEDS_INPUT" | "FAILED";
@@ -19,7 +21,10 @@ export interface BatchItemResult {
   message: string;
   resultCount: number;
   workbookRow?: { sheetName: string; rowNumber: number; candidateName: string };
+  sourceFileName?: string;
+  candidateName?: string;
   employeeContacts?: BatchEmployeeContact[];
+  candidateFunctions?: ResearchFunctionAssessment;
 }
 export type BatchEvent =
   | { type: "start"; total: number }

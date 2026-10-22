@@ -1,0 +1,23 @@
+.research-functions { margin: 16px 0; padding: 18px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; }
+.research-functions h2 { margin: 0; font-size: 16px; }
+.research-functions p { margin: 10px 0; line-height: 1.7; }
+.research-functions a { color: #0e7490; text-decoration: underline; }
+.research-functions-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.research-functions .research-functions-scope, .research-functions .research-functions-source { font-size: 12px; color: #64748b; }
+.research-functions-source { padding: 9px 12px; border-radius: 5px; background: #f8fafc; }
+.function-confidence { display: inline-block; border-radius: 4px; padding: 4px 7px; font-size: 11px; background: #f1f5f9; color: #475569; }
+.function-confidence.is-high { background: #ecfdf5; color: #047857; }
+.function-confidence.is-medium { background: #fffbeb; color: #92400e; }
+.research-function-priorities { list-style: none; margin: 14px 0 0; padding: 0; }
+.research-function-priorities > li { border-top: 1px solid #e2e8f0; }
+.research-function-priorities summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 0; font-size: 12px; }
+.research-function-priorities summary strong { flex: 1; min-width: 180px; }
+.research-function-priorities summary::after { content: "展开依据 +"; color: #0e7490; }
+.research-function-priorities details[open] > summary::after { content: "收起依据 −"; }
+.function-rank { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #ecfeff; color: #0e7490; }
+.function-reasons { padding-left: 20px; margin: 0 0 12px; font-size: 12px; line-height: 1.8; }
+.function-evidence { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+.function-evidence > li { background: #f8fafc; padding: 12px; border-radius: 5px; }
+.function-evidence > li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; }
+.function-evidence blockquote { margin: 8px 0; padding-left: 10px; border-left: 2px solid #cbd5e1; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.function-evidence small { font-size: 11px; color: #64748b; }

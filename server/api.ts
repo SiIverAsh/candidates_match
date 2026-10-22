@@ -25,6 +25,7 @@ import { batchMatchSchema } from "../src/modules/candidate-batch/presentation/co
 import { BATCH_LIMITS, BatchInputError } from "../src/modules/candidate-batch/domain/models";
 import type { BatchCommand } from "../src/modules/candidate-batch/application/process-batch";
 import { CANDIDATE_WORKBOOK_LIMITS } from "../src/modules/candidate-batch/domain/workbook";
+import { candidateColumnFiltersSchema } from "../src/modules/candidate-intake/presentation/contracts";
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const maxRequestBytes = 12 * 1024 * 1024;
@@ -317,10 +318,16 @@ export async function handleApi(
       sendJson(response, 403, { error: "FORBIDDEN" });
       return true;
     }
-    sendJson(response, 200, candidateIntakeApplication.list(user.id, {
+    let columnFilters: unknown;
+    try { columnFilters = JSON.parse(url.searchParams.get("filters") ?? "{}"); }
+    catch { sendJson(response, 400, { error: "列筛选条件无效，请清除筛选后重试。" }); return true; }
+    const parsedFilters = candidateColumnFiltersSchema.safeParse(columnFilters);
+    if (!parsedFilters.success) { sendJson(response, 400, { error: "列筛选条件无效，请检查选项和日期范围。" }); return true; }
+    sendJson(response, 200, await candidateIntakeApplication.browse(user.id, {
       page: Number(url.searchParams.get("page") ?? 1), search: url.searchParams.get("search") ?? "",
       resultsOnly: url.searchParams.get("resultsOnly") === "1",
       matchCategory: url.searchParams.get("matchCategory") ?? undefined,
+      filters: parsedFilters.data,
     }));
     return true;
   }
@@ -333,10 +340,11 @@ export async function handleApi(
     }
     const queryId = decodeURIComponent(candidateDetailRoute[1]);
     const query = candidateIntakeApplication.getQuery(queryId, user.id);
+    const profile = query ? await resumeParserApplication.ensureFunctions(queryId, user.id) : null;
     const run = query ? matchingApplication.getRun(queryId, user.id) : null;
     if (run) auditApplication.record({ actorId: user.id, actionType: "MATCH_RESULT_ACCESSED", resourceRef: queryId, outcome: "FOUND" });
     sendJson(response, query ? 200 : 404, query ? {
-      query, profile: resumeParserApplication.getProfile(queryId, user.id), run,
+      query, profile, run,
     } : { error: "NOT_FOUND" });
     return true;
   }
@@ -390,7 +398,7 @@ export async function handleApi(
       text: typeof text === "string" ? text : null,
     });
     if (result.kind === "accepted") {
-      const parsing = await resumeParserApplication.parse(result.query.id, user.id);
+      const parsing = await resumeParserApplication.ensureProfile(result.query.id, user.id);
       sendJson(response, 200, { ...result, parsing, matching: null });
     } else {
       sendJson(response, 200, result);
@@ -420,7 +428,7 @@ export async function handleApi(
       sendJson(response, 403, { error: "FORBIDDEN" });
       return true;
     }
-    const profile = resumeParserApplication.getProfile(
+    const profile = await resumeParserApplication.ensureFunctions(
       decodeURIComponent(profileRoute[1]),
       user.id,
     );
@@ -435,10 +443,9 @@ export async function handleApi(
       sendJson(response, 403, { error: "FORBIDDEN" });
       return true;
     }
-    const result = matchingApplication.run(
-      decodeURIComponent(matchingRunRoute[1]),
-      user.id,
-    );
+    const queryId = decodeURIComponent(matchingRunRoute[1]);
+    await resumeParserApplication.ensureFunctions(queryId, user.id);
+    const result = matchingApplication.run(queryId, user.id);
     sendJson(response, result.kind === "not_found" ? 404 : 200, result);
     return true;
   }
@@ -451,6 +458,7 @@ export async function handleApi(
       return true;
     }
     const queryId = decodeURIComponent(matchingResultRoute[1]);
+    await resumeParserApplication.ensureFunctions(queryId, user.id);
     const run = matchingApplication.getRun(
       queryId,
       user.id,

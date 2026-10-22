@@ -48,7 +48,7 @@ function dependencies(
     files: { prepare: prepareResumeFile },
     repository: {
       purgeExpired: () => 0,
-      create: (...args) => { saved.push(args); },
+      createOrReuse: (...args) => { saved.push(args); return { query: args[0], reused: false }; },
     },
     employeeVersions: {
       readiness: () => ({
@@ -110,7 +110,7 @@ assert.deepEqual(chooseOne.kind, "rejected");
 if (chooseOne.kind === "rejected") assert.equal(chooseOne.code, "CHOOSE_ONE_SOURCE");
 
 const failingDependencies = dependencies(true);
-failingDependencies.repository.create = () => { throw new Error("storage unavailable"); };
+failingDependencies.repository.createOrReuse = () => { throw new Error("storage unavailable"); };
 const persistenceFailure = await submitCandidate(
   { actor: { id: "test", displayName: "test" }, file: null, text: sufficientText },
   failingDependencies,

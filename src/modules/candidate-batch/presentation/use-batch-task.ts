@@ -38,5 +38,9 @@ export function useBatchTask() {
     }
     return { items: received, total: count, complete: complete && !active.signal.aborted };
   }
-  return { items, total, running, error, finished, run, stop: () => controller.current?.abort() };
+  function reset() {
+    if (controller.current) return;
+    setItems([]); setTotal(0); setError(""); setFinished(false);
+  }
+  return { items, total, running, error, finished, run, reset, stop: () => controller.current?.abort() };
 }

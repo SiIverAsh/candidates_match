@@ -104,7 +104,7 @@ try {
   assert.equal(matching.getRun(mixed[0].queryId!, actor.id), null);
   const source = await parser.getPreview(mixed[4].queryId!, actor.id);
   assert.ok(JSON.stringify(source).includes("001234"));
-  assert.equal(candidates.getQuery(mixed[0].queryId!, "other-user"), null);
+  assert.equal(candidates.getQuery(mixed[0].queryId!, "other-user")?.id, mixed[0].queryId);
 
   const fullText = `姓名：粘贴的旧姓名\n工作经历\n${work}\n教育经历\n${education}`;
   const full = await results(await upload(await fixture([["姓名列优先", "", "", "公司：不应重复导入", "", fullText]])));
@@ -179,7 +179,7 @@ try {
   assert.ok(merged.every(item => item.status === "FAILED"));
 
   const beforeErrors = candidates.list(actor.id, {}).total;
-  for (const bytes of [new TextEncoder().encode("not an Excel"), await fixture([]), await fixture([valid("重复列")], ["姓名", "姓名", ...headers.slice(2)]), await fixture([valid("缺姓名列")], ["", ...headers.slice(1)]), await fixture(Array.from({ length: 1001 }, (_, i) => valid(`超限${i}`)))]) {
+  for (const bytes of [new TextEncoder().encode("not an Excel"), await fixture([]), await fixture([valid("重复列")], ["姓名", "姓名", ...headers.slice(2)]), await fixture([valid("缺姓名列")], ["", ...headers.slice(1)])]) {
     assert.equal((await upload(bytes)).status, 400);
   }
   assert.equal((await upload(template, true, "legacy.xls")).status, 400);
@@ -192,8 +192,8 @@ try {
   assert.equal((await upload(new Uint8Array(await bomb.generateAsync({type:"arraybuffer",compression:"DEFLATE"})))).status, 400);
   assert.equal(candidates.list(actor.id, {}).total, beforeErrors);
 
-  const atLimit = new File([await fixture(Array.from({length:1000}, (_, i) => valid(`容量边界${i}`)))], "limit.xlsx");
-  assert.equal((await batch.prepareWorkbook(atLimit)).length, 1000);
+  const largeWorkbook = new File([await fixture(Array.from({length:1500}, (_, i) => valid(`批量候选人${i}`)))], "large-workbook.xlsx");
+  assert.equal((await batch.prepareWorkbook(largeWorkbook)).length, 1500);
 
   const start = Date.now();
   const bulk = await results(await upload(await fixture(Array.from({length:500}, (_, i) => valid(`批量医药候选人${i + 1}`)))));

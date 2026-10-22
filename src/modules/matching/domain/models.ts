@@ -1,3 +1,5 @@
+import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
+
 export type MatchConfidence = "HIGH" | "MEDIUM" | "LOW";
 export type MatchRunStatus = "COMPLETED" | "NO_RESULTS" | "SKIPPED_INSUFFICIENT";
 export type EvidenceStrength = "STRONG" | "MEDIUM" | "WEAK";
@@ -47,6 +49,7 @@ export interface MatchRun {
   status: MatchRunStatus;
   resultCount: number;
   results: EmployeeMatchResult[];
+  candidateFunctions?: ResearchFunctionAssessment;
   ruleVersion: string;
   thresholdVersion: string;
   normalizerVersion: string;

@@ -38,9 +38,10 @@ export interface MatchingContext {
 }
 
 export interface MatchingRepository {
+  // Reads and deduplication share the recruiting workspace; requestedBy identifies the audit actor.
   findActiveEmployeeVersion(): string | null;
   loadContext(queryId: string, requestedBy: string, now: string, employeeVersionId: string | null): MatchingContext | null;
-  saveRun(run: MatchRun, requestedBy: string): void;
+  saveRun(run: MatchRun, requestedBy: string): MatchRun;
   findRun(queryId: string, requestedBy: string, now: string): MatchRun | null;
 }
 

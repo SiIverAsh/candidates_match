@@ -92,7 +92,7 @@ export function findActiveEmployeeVersion(): string | null {
 
 export function loadMatchingContext(
   queryId: string,
-  requestedBy: string,
+  _requestedBy: string,
   now: string,
   employeeVersionId: string | null,
 ): MatchingContext | null {
@@ -102,9 +102,9 @@ export function loadMatchingContext(
            ? AS employee_version_id, p.profile_json
     FROM candidate_queries q
     JOIN candidate_profiles p ON p.query_id = q.id
-    WHERE q.id = ? AND q.submitted_by = ?
+    WHERE q.id = ?
       AND q.expires_at > ? AND p.expires_at > ?
-  `).get(employeeVersionId, queryId, requestedBy, now, now) as unknown as ContextRow | undefined;
+  `).get(employeeVersionId, queryId, now, now) as unknown as ContextRow | undefined;
   if (!row) return null;
   if (!row.employee_version_id) {
     return { queryId: row.query_id, submittedBy: row.submitted_by, submittedAt: row.submitted_at, expiresAt: row.expires_at, employeeVersionId: null, profile: JSON.parse(row.profile_json) as CandidateProfile, employees: [] };
@@ -167,37 +167,33 @@ export function loadMatchingContext(
   };
 }
 
-export function saveMatchRun(run: MatchRun, requestedBy: string): void {
+export function saveMatchRun(run: MatchRun, requestedBy: string): MatchRun {
   const database = getDatabase();
-  const ownsQuery = database.prepare(`
-    SELECT 1 FROM candidate_queries
-    WHERE id = ? AND submitted_by = ? AND expires_at > ?
-  `).get(run.queryId, requestedBy, run.createdAt);
-  if (!ownsQuery) throw new Error("QUERY_NOT_AVAILABLE");
-
   database.exec("BEGIN IMMEDIATE");
   try {
+    const query = database.prepare(`
+      SELECT submitted_by FROM candidate_queries
+      WHERE id = ? AND expires_at > ?
+    `).get(run.queryId, run.createdAt) as { submitted_by: string } | undefined;
+    if (!query) throw new Error("QUERY_NOT_AVAILABLE");
+
+    // The transaction also covers callers that raced past the application lookup.
+    const existing = findMatchRun(run.queryId, requestedBy, run.createdAt);
+    if (existing) {
+      database.exec("COMMIT");
+      return existing;
+    }
+
     database.prepare(`
       INSERT INTO match_runs (
         id, query_id, submitted_by, employee_version_id, status,
         result_count, run_json, rule_version, threshold_version,
         normalizer_version, created_at, expires_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(query_id) DO UPDATE SET
-        id = excluded.id,
-        employee_version_id = excluded.employee_version_id,
-        status = excluded.status,
-        result_count = excluded.result_count,
-        run_json = excluded.run_json,
-        rule_version = excluded.rule_version,
-        threshold_version = excluded.threshold_version,
-        normalizer_version = excluded.normalizer_version,
-        created_at = excluded.created_at,
-        expires_at = excluded.expires_at
     `).run(
       run.id,
       run.queryId,
-      requestedBy,
+      query.submitted_by,
       run.employeeVersionId,
       run.status,
       run.resultCount,
@@ -220,6 +216,7 @@ export function saveMatchRun(run: MatchRun, requestedBy: string): void {
       run.createdAt,
     );
     database.exec("COMMIT");
+    return run;
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;
@@ -228,14 +225,20 @@ export function saveMatchRun(run: MatchRun, requestedBy: string): void {
 
 export function findMatchRun(
   queryId: string,
-  requestedBy: string,
+  _requestedBy: string,
   now: string,
 ): MatchRun | null {
-  const row = getDatabase().prepare(`
-    SELECT run_json FROM match_runs
-    WHERE query_id = ? AND submitted_by = ? AND expires_at > ?
-  `).get(queryId, requestedBy, now) as { run_json: string } | undefined;
-  return row ? JSON.parse(row.run_json) as MatchRun : null;
+  const database = getDatabase();
+  const row = database.prepare(`
+    SELECT m.run_json FROM match_runs m
+    JOIN candidate_queries q ON q.id = m.query_id
+    WHERE m.query_id = ? AND m.expires_at > ? AND q.expires_at > ?
+  `).get(queryId, now, now) as { run_json: string } | undefined;
+  if (!row) return null;
+  const profile = database.prepare("SELECT json_extract(profile_json, '$.researchFunctions') AS functions_json FROM candidate_profiles WHERE query_id = ? AND expires_at > ?").get(queryId, now) as { functions_json: string | null } | undefined;
+  if (!profile) return null;
+  const run = JSON.parse(row.run_json) as MatchRun;
+  return profile.functions_json ? { ...run, candidateFunctions: JSON.parse(profile.functions_json) as MatchRun["candidateFunctions"] } : run;
 }
 
 export const matchingRepository: MatchingRepository = {

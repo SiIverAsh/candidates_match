@@ -1,13 +1,14 @@
 import { employeeDataApplication } from "../employee-data/composition";
 import { getCandidateReadiness } from "./application/get-readiness";
-import { getCandidateQuery, listCandidates } from "./application/browse-candidates";
+import { browseCandidates, getCandidateQuery, listCandidates, type CandidateListInput } from "./application/browse-candidates";
+import { resumeParserApplication } from "../resume-parser/composition";
 import {
   submitCandidate,
   type SubmitCandidateCommand,
 } from "./application/submit-candidate";
 import { prepareResumeFile } from "./infrastructure/file/prepare-resume-file";
 import {
-  createCandidateQuery,
+  createOrReuseCandidateQuery,
   purgeExpiredCandidateQueries,
   findCandidateQuery,
   listCandidateQueries,
@@ -32,7 +33,7 @@ const employeeVersions = {
 const dependencies = {
   files: { prepare: prepareResumeFile },
   repository: {
-    create: createCandidateQuery,
+    createOrReuse: createOrReuseCandidateQuery,
     purgeExpired: purgeExpiredCandidateQueries,
   },
   employeeVersions,
@@ -41,7 +42,15 @@ const dependencies = {
 };
 
 export const candidateIntakeApplication = {
-  list: (requestedBy: string, input: { page?: number; search?: string; resultsOnly?: boolean; matchCategory?: string }) => {
+  browse: (requestedBy: string, input: CandidateListInput) => {
+    employeeVersions.readiness();
+    return browseCandidates(requestedBy, input, {
+      repository: { list: listCandidateQueries, find: findCandidateQuery },
+      ensureFunctions: resumeParserApplication.ensureAllFunctions,
+      now: () => new Date().toISOString(),
+    });
+  },
+  list: (requestedBy: string, input: CandidateListInput) => {
     employeeVersions.readiness();
     return listCandidates(requestedBy, input, { list: listCandidateQueries, find: findCandidateQuery }, new Date().toISOString());
   },

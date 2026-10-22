@@ -1,0 +1,101 @@
+{
+  "version": "1.4",
+  "taxonomy": "BeOne Research Function Ontology",
+  "scope": "Research only (Discovery stage)",
+  "updated": "2026-10-22",
+  "description": "仅覆盖药物发现阶段的 Research 职能。DMPK、Toxicology、Translational Science、CMC、Clinical 均不在此表。",
+  "scoring": {
+    "strong_keyword": 3,
+    "supporting_keyword": 2,
+    "title_keyword": 3,
+    "negative_keyword": -3,
+    "assign_threshold": 6,
+    "ambiguous_gap": 2,
+    "note": "各子职能分别计分，取最高分且 >= 6 者；与次高分差 <= 2 时标记 ambiguous 人工复核"
+  },
+  "functions": [
+    {
+      "id": "discovery_biology",
+      "name": "Discovery Biology / Target Biology",
+      "internal_dept_code": "DBL",
+      "evidence_level": "internal",
+      "aliases": ["Discovery Biology", "Discovery Sciences", "Discovery Research", "Research Biology", "Disease Biology", "Target Biology", "Drug Discovery Biology", "Biological Sciences"],
+      "strong_keywords": ["Target Identification", "Target Discovery", "Target Validation", "Target ID", "Disease Biology", "Target Biology", "Drug Discovery", "Mechanism of Action", "MoA", "Candidate Nomination", "Candidate Selection", "Lead Discovery", "Lead Identification", "TPP"],
+      "supporting_keywords": ["Cell-based Assay", "Cell Based Assays", "Assay Development", "Reporter Assay", "Luciferase Assay", "Functional Assay", "Co-IP", "Immunoprecipitation", "Signaling Pathway", "Knockdown", "Knockout", "siRNA", "shRNA", "CRISPR", "CRISPR/Cas9", "Gene Editing", "Flow Cytometry", "Multi-color Flow Cytometry", "Spectral Flow Cytometry", "FACS", "Organoid", "Primary Cells", "Co-culture", "Cancer Biology", "Tumor Biology", "Tumor Immunology", "Immuno-Oncology", "Tumor Microenvironment", "T Cell Biology", "B Cell Biology", "Myeloid Biology", "Innate Immunity", "Adaptive Immunity", "Immunobiology", "Synthetic Lethality", "DNA Damage Response", "T Cell Killing Assay", "Cytotoxicity Assay"],
+      "title_keywords": ["Discovery Biologist", "Research Scientist", "Principal Scientist", "Senior Scientist", "Research Investigator", "Group Leader", "Biologist", "Head of Biology", "Cancer Biologist", "Immunologist"],
+      "sub_functions": [
+        {"id": "target_biology", "name": "Target ID / Validation", "keywords": ["Target Identification", "Target Discovery", "Target Validation", "Target Biology"]},
+        {"id": "disease_biology", "name": "Disease Biology / MoA", "keywords": ["Disease Biology", "Mechanism of Action", "MoA", "Signaling Pathway"]},
+        {"id": "assay_biology", "name": "In Vitro Assay Biology", "keywords": ["Assay Development", "Cell-based Assay", "Reporter Assay", "Functional Assay"]}
+      ],
+      "combo_rules": ["疾病生物学词（Cancer Biology / T Cell Biology 等）需与 Drug Discovery / Target 类强词共现才计分"]
+    },
+    {
+      "id": "screening",
+      "name": "Screening / Hit Finding",
+      "internal_dept_code": "DBL",
+      "evidence_level": "suggested_extension",
+      "aliases": ["Lead Discovery", "Hit Discovery", "Screening Sciences", "Compound Screening"],
+      "strong_keywords": ["Hit Identification", "Hit Finding", "High-Throughput Screening", "HTS", "CRISPR Screening", "Functional Screening", "Phenotypic Screening", "Hit-to-Lead", "Lead Optimization"],
+      "supporting_keywords": ["AlphaLISA", "AlphaScreen", "HTRF", "TR-FRET", "Fluorescence Polarization", "High-Content Imaging", "High-Content Screening", "Incucyte", "Compound Profiling", "Selectivity Profiling", "Lab Automation", "Liquid Handling", "Pooled Screening", "Library Screening"],
+      "title_keywords": ["Screening Scientist", "HTS Scientist", "Lead Discovery Scientist"]
+    },
+    {
+      "id": "molecular_science",
+      "name": "Molecular Science / Protein & Structural Science",
+      "internal_dept_code": "MS",
+      "evidence_level": "mixed_internal_and_suggested",
+      "aliases": ["Molecular Science", "Molecular Sciences", "Molecular Discovery", "Structural Biology", "Protein Science", "Protein Sciences", "Biophysics"],
+      "strong_keywords": ["Structural Biology", "Protein Science", "Cryo-EM", "X-ray Crystallography", "Crystallography", "Protein Crystallization", "Biophysics", "Structure Determination"],
+      "supporting_keywords": ["Protein Expression", "Protein Purification", "Recombinant Protein", "SPR", "Surface Plasmon Resonance", "Biacore", "BLI", "Octet", "ITC", "Isothermal Titration Calorimetry", "DSF", "HDX-MS", "NMR", "Enzymology", "Enzyme Kinetics", "Protein-Protein Interactions", "AlphaFold", "PyMOL", "ChimeraX", "Molecular Modeling"],
+      "title_keywords": ["Protein Scientist", "Structural Biologist", "Biophysicist", "Crystallographer"],
+      "combo_rules": ["Protein Purification 需与 Structural Biology / Biophysics / Drug Discovery 共现才计分"]
+    },
+    {
+      "id": "medicinal_chemistry",
+      "name": "Medicinal Chemistry",
+      "internal_dept_code": null,
+      "evidence_level": "internal",
+      "aliases": ["Medicinal Chemistry", "Med Chem", "MedChem", "Discovery Chemistry", "Drug Discovery Chemistry", "Chemical Biology"],
+      "strong_keywords": ["Medicinal Chemistry", "Medicinal Chemist", "Structure-Based Drug Design", "SBDD", "Structure-Activity Relationship", "SAR", "Hit-to-Lead", "Lead Optimization", "Compound Design"],
+      "supporting_keywords": ["Organic Synthesis", "Synthetic Organic Chemistry", "Small Molecule", "Kinase Inhibitor", "Covalent Inhibitor", "PROTAC", "Degrader", "Molecular Glue", "Targeted Protein Degradation", "CDAC", "Induced Proximity", "DNA-encoded Library", "DEL", "Fragment-Based Drug Discovery", "FBDD", "Computational Chemistry", "CADD", "Schrodinger", "FEP", "Chemoproteomics", "Linker-Payload", "Payload Chemistry"],
+      "title_keywords": ["Medicinal Chemist", "Discovery Chemist", "Computational Chemist"],
+      "combo_rules": ["单独 Chemist / Organic Synthesis 仅弱信号，需与 Drug Discovery / SAR / Lead Optimization 共现"]
+    },
+    {
+      "id": "biologics_discovery",
+      "name": "Antibody / Biologics Discovery",
+      "internal_dept_code": "BIO",
+      "evidence_level": "mixed_internal_and_suggested",
+      "aliases": ["Biologics Discovery", "Antibody Discovery", "Protein Engineering", "Antibody Engineering", "Biotherapeutics Discovery", "Large Molecule Research"],
+      "strong_keywords": ["Antibody Discovery", "Antibody Engineering", "Protein Engineering", "Phage Display", "Yeast Display", "Hybridoma", "Single B Cell Cloning", "Affinity Maturation", "Antibody Humanization", "Bispecific Antibody", "Multispecific", "ADC Discovery", "T Cell Engager", "TCE"],
+      "supporting_keywords": ["Monoclonal Antibody", "mAb", "Bispecific", "ADC", "Antibody-Drug Conjugate", "Nanobody", "VHH", "Fc Engineering", "Epitope Mapping", "Binding Kinetics", "Library Construction", "Immunization Campaign"],
+      "title_keywords": ["Antibody Engineer", "Protein Engineer", "Antibody Scientist", "Biologics Discovery Scientist"]
+    },
+    {
+      "id": "in_vivo_pharmacology",
+      "name": "In Vivo Pharmacology (Efficacy)",
+      "internal_dept_code": "IVP",
+      "evidence_level": "internal",
+      "aliases": ["In Vivo Pharmacology", "Discovery Pharmacology", "Efficacy Pharmacology", "In Vitro & In Vivo Pharmacology"],
+      "strong_keywords": ["In Vivo Pharmacology", "Efficacy Study", "Efficacy Pharmacology", "Tumor Growth Inhibition", "TGI", "Primary Pharmacodynamics"],
+      "supporting_keywords": ["In Vivo", "Animal Model", "Mouse Models", "Disease Model", "Xenograft", "CDX", "PDX", "Syngeneic Model", "Humanized Mice", "GEMM", "Orthotopic Model", "Animal Surgery", "IACUC", "Target Engagement", "EAE Model", "Collagen-Induced Arthritis", "DSS Colitis", "Imiquimod Model"],
+      "title_keywords": ["In Vivo Pharmacologist", "In Vivo Scientist", "Discovery Pharmacologist"]
+    },
+    {
+      "id": "computational_discovery",
+      "name": "Computational Biology (Discovery)",
+      "internal_dept_code": null,
+      "evidence_level": "mixed_internal_and_suggested",
+      "aliases": ["Computational Biology", "Discovery Bioinformatics", "Discovery Analytics", "AIDD", "AI Drug Discovery"],
+      "strong_keywords": ["Computational Biology", "In Silico Target Discovery", "AIDD", "AI Drug Discovery", "Target Prioritization", "Computational Drug Discovery"],
+      "supporting_keywords": ["Bioinformatics", "Single Cell Genomics", "scRNA-seq", "Spatial Transcriptomics", "Multi-omics", "RNA-seq", "NGS", "Genomics", "Transcriptomics", "ATAC-seq", "ChIP-seq", "Knowledge Graph", "Machine Learning", "Deep Learning", "Seurat", "Scanpy"],
+      "title_keywords": ["Computational Biologist", "Discovery Data Scientist", "AIDD Scientist"],
+      "combo_rules": ["必须与 Drug Discovery / Target 类词共现；与 Biomarker / Clinical Samples 共现时不计入 Research"]
+    }
+  ],
+  "exclusion_keywords": {
+    "note": "命中即扣分（-3），用于排除非 Research 人员，不作为分类",
+    "keywords": ["Toxicology", "GLP", "Safety Pharmacology", "DMPK", "ADME", "IND-Enabling", "Biomarker", "Companion Diagnostics", "Translational Medicine", "Clinical Pharmacology", "PopPK", "Process Development", "Process Chemistry", "Analytical Development", "Purification Scale-up", "Cell Line Development", "Upstream Process", "Downstream Process", "Formulation", "GMP", "Manufacturing", "Quality Assurance", "QC", "Regulatory Affairs", "Clinical Operations", "CRA", "Medical Affairs", "MSL", "Medical Writing", "Pharmacovigilance", "Commercial", "Sales", "Marketing", "Market Access", "Business Development", "Biostatistics", "Pharmacist", "Oncologist"]
+  }
+}

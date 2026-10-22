@@ -59,7 +59,7 @@ try {
   const database = new DatabaseSync(process.env.CONNECTION_FINDER_DB_PATH);
   try {
     const boundVersion = () => database.prepare("SELECT employee_version_id FROM candidate_queries WHERE id = ?").get(result.query.id)?.employee_version_id;
-    assert.equal(matchingApplication.run(result.query.id, "other-user").kind, "not_found");
+    assert.equal(matchingApplication.run(result.query.id, "other-user").kind, "matched");
     assert.equal(matchingApplication.run("missing-query", actor.id).kind, "not_found");
     assert.equal(boundVersion(), null);
 
@@ -110,13 +110,15 @@ try {
     const nextVersion = publishEmployeeData(data, actor);
     assert.notEqual(nextVersion.id, version.id);
     assert.equal(matchingApplication.getRun(result.query.id, actor.id)?.employeeVersionId, version.id);
-    // Legacy submission metadata must not pin future matching to an old version.
+    // Repeated matching reuses the original version until the profile is explicitly regenerated.
     database.prepare("UPDATE candidate_queries SET employee_version_id = ? WHERE id = ?").run(version.id, result.query.id);
     const repeated = matchingApplication.run(result.query.id, actor.id);
     assert.equal(repeated.kind, "matched");
-    if (repeated.kind === "matched") assert.equal(repeated.run.employeeVersionId, nextVersion.id);
+    if (repeated.kind === "matched") assert.equal(repeated.run.employeeVersionId, version.id);
     assert.equal(boundVersion(), version.id);
     publishEmployeeData({ employees: [], workExperiences: [], educationExperiences: [] }, actor);
+    assert.equal(matchingApplication.run(result.query.id, actor.id).kind, "matched");
+    await resumeParserApplication.parse(result.query.id, actor.id);
     assert.equal(matchingApplication.run(result.query.id, actor.id).kind, "no_employee_version");
     assert.equal(database.prepare("PRAGMA foreign_key_check").all().length, 0);
   } finally {

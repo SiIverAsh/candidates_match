@@ -1,3 +1,5 @@
+import type { PossibleFunctionsSummary } from "./possible-functions";
+
 export type CandidateSourceType = "FILE" | "TEXT";
 
 export type CandidateQueryStatus = "QUEUED_FOR_PARSING";
@@ -17,7 +19,7 @@ export type CandidateSourcePayload =
   | { sourceType: "TEXT"; sourceFormat: "plain-text"; text: string }
   | {
       sourceType: "FILE";
-      sourceFormat: "pdf" | "docx" | "txt";
+      sourceFormat: "pdf" | "doc" | "docx" | "txt";
       mimeType: string;
       bytes: Uint8Array;
     };
@@ -32,7 +34,9 @@ export interface CandidateReadiness {
 }
 
 export interface CandidateQuerySummary extends CandidateQuery {
+  submittedByName: string | null;
   candidateName: string | null;
+  possibleFunctions: PossibleFunctionsSummary;
   parseStatus: "COMPLETE" | "PARTIAL" | "INSUFFICIENT" | "FAILED" | null;
   matching: {
     status: "COMPLETED" | "NO_RESULTS" | "SKIPPED_INSUFFICIENT";

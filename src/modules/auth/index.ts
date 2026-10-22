@@ -12,6 +12,5 @@ export { hasPermission } from "./domain/permissions";
 export type { AuthPermission } from "./domain/permissions";
 export {
   AdminAccessPage,
-  DashboardPage,
   LoginPage,
 } from "./presentation/pages";

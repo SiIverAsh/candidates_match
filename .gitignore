@@ -48,6 +48,7 @@ next-env.d.ts
 /var/
 
 
-/docs
+/docs/*
+!/docs/research.json
 
 /test_file

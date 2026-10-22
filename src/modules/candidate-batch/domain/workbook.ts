@@ -1,6 +1,6 @@
 import { validateCandidateText } from "../../candidate-intake/domain/policies";
 
-export const CANDIDATE_WORKBOOK_LIMITS = { maxRows: 1_000, maxBytes: 10 * 1024 * 1024, maxExpandedBytes: 50 * 1024 * 1024 } as const;
+export const CANDIDATE_WORKBOOK_LIMITS = { maxBytes: 10 * 1024 * 1024, maxExpandedBytes: 50 * 1024 * 1024 } as const;
 export const CANDIDATE_COLUMNS = {
   name: ["姓名", "候选人姓名", "候选人", "人员姓名", "名字", "name", "candidate name", "full name"],
   email: ["邮箱", "电子邮箱", "电子邮件", "联系邮箱", "email", "e-mail"],

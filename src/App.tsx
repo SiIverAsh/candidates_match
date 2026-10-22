@@ -4,7 +4,6 @@ import { api } from "@/client/api";
 import { hasPermission } from "@/modules/auth/domain/permissions";
 import type { AuthenticatedUser } from "@/modules/auth/domain/user";
 import { AdminAccessPage } from "@/modules/auth/presentation/pages/admin-access-page";
-import { DashboardPage } from "@/modules/auth/presentation/pages/dashboard-page";
 import { LoginPage } from "@/modules/auth/presentation/pages/login-page";
 import { CandidateIntakePage } from "@/modules/candidate-intake/presentation/pages/candidate-intake-page";
 import { CandidateLibraryPage } from "@/modules/candidate-intake/presentation/pages/candidate-library-page";
@@ -12,10 +11,10 @@ import { CandidateDetailPage } from "@/modules/candidate-intake/presentation/pag
 import { EmployeeDataPage } from "@/modules/employee-data/presentation/pages/employee-data-page";
 import { ResultsPage } from "@/modules/results/presentation/pages/results-page";
 import { AiAssistant } from "@/modules/enterprise-ai/presentation/ai-assistant";
-import { BatchImportPage } from "@/modules/candidate-batch/presentation/batch-import-page";
 
-function navigate(path: string): void {
-  window.history.pushState({}, "", path);
+function navigate(path: string, replace = false): void {
+  if (replace) window.history.replaceState({}, "", path);
+  else window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
@@ -26,7 +25,7 @@ function ForbiddenPage() {
         <span className="eyebrow">权限受限</span>
         <h1 id="forbidden-title">你没有访问此页面的权限</h1>
         <p>如果你需要管理员能力，请联系系统管理员调整角色。</p>
-        <a className="button-link" href="/">返回工作台</a>
+        <a className="button-link" href="/candidates/new">返回人脉匹配</a>
       </section>
     </main>
   );
@@ -37,9 +36,15 @@ export default function App() {
   const [path, setPath] = useState(window.location.pathname);
 
   useEffect(() => {
-    const onPopState = () => setPath(window.location.pathname);
+    const onPopState = () => {
+      if (window.location.pathname === "/") navigate("/candidates/new", true);
+      else setPath(window.location.pathname);
+    };
     window.addEventListener("popstate", onPopState);
-    api.session().then(setUser).catch(() => setUser(null));
+    api.session().then((authenticatedUser) => {
+      setUser(authenticatedUser);
+      if (authenticatedUser && ["/", "/login"].includes(window.location.pathname)) navigate("/candidates/new", true);
+    }).catch(() => setUser(null));
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
@@ -57,7 +62,7 @@ export default function App() {
       <LoginPage
         onAuthenticated={(authenticatedUser) => {
           setUser(authenticatedUser);
-          navigate("/");
+          navigate("/candidates/new", true);
         }}
       />
     );
@@ -65,7 +70,7 @@ export default function App() {
   function renderAuthenticatedPage(user: AuthenticatedUser) {
     if (path === "/candidates/import") {
       return hasPermission(user, "candidate:query")
-        ? <BatchImportPage user={user} onLogout={logout} />
+        ? <CandidateIntakePage user={user} onLogout={logout} initialMode="batch" />
         : <ForbiddenPage />;
     }
     if (path === "/admin/employee-data") {
@@ -73,7 +78,7 @@ export default function App() {
         ? <EmployeeDataPage user={user} onLogout={logout} />
         : <ForbiddenPage />;
     }
-    if (path === "/candidate/new") {
+    if (path === "/candidates/new" || path === "/candidate/new") {
       return hasPermission(user, "candidate:query")
         ? <CandidateIntakePage user={user} onLogout={logout} />
         : <ForbiddenPage />;
@@ -100,7 +105,9 @@ export default function App() {
         ? <AdminAccessPage user={user} />
         : <ForbiddenPage />;
     }
-    return <DashboardPage user={user} onLogout={logout} />;
+    return hasPermission(user, "candidate:query")
+      ? <CandidateIntakePage user={user} onLogout={logout} />
+      : <ForbiddenPage />;
   }
   return <>{renderAuthenticatedPage(user)}<AiAssistant key={user.id} /></>;
 }

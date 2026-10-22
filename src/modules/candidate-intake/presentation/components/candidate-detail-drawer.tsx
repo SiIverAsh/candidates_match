@@ -1,19 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { X, Network, FileText, ExternalLink, Building2, GraduationCap } from "lucide-react";
 import { api, type CandidateDetail } from "@/client/api";
 import { copyText } from "@/client/clipboard";
 import { groupMatchResults } from "@/modules/results/domain/group-results";
 import { ConfidenceGroup } from "@/modules/results/presentation/components/confidence-group";
 import { CandidateProfilePreview } from "./candidate-profile-preview";
+import { ResearchFunctionSummary } from "@/modules/research-functions/presentation/research-function-summary";
 
-export function CandidateDetailDrawer({ queryId, onClose }: { queryId: string; onClose: () => void }) {
+const TABS = ["matching", "functions", "profile"] as const;
+type DrawerTab = (typeof TABS)[number];
+
+export function CandidateDetailDrawer({ queryId, onClose, initialTab = "matching" }: { queryId: string; onClose: () => void; initialTab?: DrawerTab }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [detail, setDetail] = useState<CandidateDetail | null>(null);
   const [error, setError] = useState(false);
-  const [tab, setTab] = useState<"matching" | "profile">("matching");
+  const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [copyError, setCopyError] = useState(false);
+  function navigateTabs(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const next = TABS[(TABS.indexOf(tab) + (event.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length];
+    setTab(next);
+    document.getElementById(`${next}-tab`)?.focus();
+  }
 
   useEffect(() => {
     const element = dialog.current;
@@ -56,8 +67,9 @@ export function CandidateDetailDrawer({ queryId, onClose }: { queryId: string; o
         <button className="icon-button" autoFocus type="button" aria-label="关闭候选人详情" onClick={onClose}><X size={20} /></button>
       </header>
       <div className="drawer-tabs" role="tablist" aria-label="候选人详情视图">
-        <button id="matching-tab" type="button" role="tab" aria-selected={tab === "matching"} aria-controls="drawer-matching" tabIndex={tab === "matching" ? 0 : -1} onClick={() => setTab("matching")} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { setTab("profile"); document.getElementById("profile-tab")?.focus(); } }}><Network size={15} />内部人脉匹配<span>{detail?.run?.resultCount ?? "—"}</span></button>
-        <button id="profile-tab" type="button" role="tab" aria-selected={tab === "profile"} aria-controls="drawer-profile" tabIndex={tab === "profile" ? 0 : -1} onClick={() => setTab("profile")} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { setTab("matching"); document.getElementById("matching-tab")?.focus(); } }}><FileText size={15} />结构化简历</button>
+        <button id="matching-tab" type="button" role="tab" aria-selected={tab === "matching"} aria-controls="drawer-matching" tabIndex={tab === "matching" ? 0 : -1} onClick={() => setTab("matching")} onKeyDown={navigateTabs}><Network size={15} />内部人脉匹配<span>{detail?.run?.resultCount ?? "—"}</span></button>
+        <button id="functions-tab" type="button" role="tab" aria-selected={tab === "functions"} aria-controls="drawer-functions" tabIndex={tab === "functions" ? 0 : -1} onClick={() => setTab("functions")} onKeyDown={navigateTabs}><Building2 size={15} />可能职能</button>
+        <button id="profile-tab" type="button" role="tab" aria-selected={tab === "profile"} aria-controls="drawer-profile" tabIndex={tab === "profile" ? 0 : -1} onClick={() => setTab("profile")} onKeyDown={navigateTabs}><FileText size={15} />结构化简历</button>
       </div>
       <div className="drawer-body">
         {!detail ? <p className={error ? "form-error" : "empty-copy"} role={error ? "alert" : "status"}>{error ? "资料暂时无法加载，可能已过期或无权访问。请关闭后重试。" : "正在读取候选人资料…"}</p> : <>
@@ -75,6 +87,7 @@ export function CandidateDetailDrawer({ queryId, onClose }: { queryId: string; o
             {copyError ? <p className="form-error" role="alert">邮箱复制失败，请手动复制卡片中的邮箱。</p> : null}
           </section>
           <section id="drawer-profile" role="tabpanel" aria-labelledby="profile-tab" hidden={tab !== "profile"}>{profile ? <CandidateProfilePreview profile={profile} /> : <p className="empty-copy">该简历尚未完成解析。</p>}</section>
+          <section id="drawer-functions" role="tabpanel" aria-labelledby="functions-tab" hidden={tab !== "functions"}><ResearchFunctionSummary assessment={profile?.researchFunctions ?? detail.run?.candidateFunctions} queryId={queryId} /></section>
         </>}
       </div>
       <footer className="drawer-footer"><small>资料保留 7 天{detail ? ` · ${new Date(detail.query.expiresAt).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })} 到期` : ""}</small><a className="secondary-link" href={`/candidates/${encodeURIComponent(queryId)}`}><ExternalLink size={14} />打开完整资料</a></footer>

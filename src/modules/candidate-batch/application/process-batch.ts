@@ -1,6 +1,6 @@
 import { BATCH_LIMITS, BatchInputError, type BatchEvent, type BatchItemResult } from "../domain/models";
 import type { BatchActor, BatchDependencies, BatchFile } from "./ports";
-import { CANDIDATE_WORKBOOK_LIMITS, type WorkbookCandidateRow } from "../domain/workbook";
+import type { WorkbookCandidateRow } from "../domain/workbook";
 
 export type BatchCommand =
   | { kind: "import"; files: BatchFile[]; matchAfterImport: boolean }
@@ -12,7 +12,7 @@ export function validateBatch(command: BatchCommand): void {
     if (!command.files.length || command.files.length > BATCH_LIMITS.maxFiles) throw new BatchInputError(`每批请选择 1～${BATCH_LIMITS.maxFiles} 份简历。`);
     if (command.files.reduce((total, file) => total + file.size, 0) > BATCH_LIMITS.maxTotalBytes) throw new BatchInputError("每批文件总大小不能超过 25 MB。");
   } else if (command.kind === "workbook") {
-    if (!command.rows.length || command.rows.length > CANDIDATE_WORKBOOK_LIMITS.maxRows) throw new BatchInputError("Excel 每批需包含 1～1,000 位候选人。");
+    if (!command.rows.length) throw new BatchInputError("Excel 每批需至少包含一位候选人。");
   } else {
     if (!command.queryIds.length || command.queryIds.length > BATCH_LIMITS.maxQueryIds) throw new BatchInputError(`每批请选择 1～${BATCH_LIMITS.maxQueryIds} 位候选人。`);
     if (new Set(command.queryIds).size !== command.queryIds.length) throw new BatchInputError("同一批次不能重复选择候选人。");
@@ -22,11 +22,11 @@ export function validateBatch(command: BatchCommand): void {
 function matchItem(item: BatchItemResult, actorId: string, dependencies: BatchDependencies): BatchItemResult {
   const result = dependencies.match(item.queryId!, actorId);
   if (result.kind !== "matched") return { ...item, status: result.kind === "no_employee_version" ? "NEEDS_DATA" : "FAILED", message: result.message };
+  item = { ...item, candidateFunctions: result.run.candidateFunctions ?? item.candidateFunctions };
   if (result.run.status === "SKIPPED_INSUFFICIENT") return { ...item, status: "NEEDS_INPUT", message: "经历信息不足，请补充简历后重试。" };
-  if (item.workbookRow) {
-    item = { ...item, employeeContacts: result.run.results.map(({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank }) => ({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank })) };
-  }
-  return { ...item, status: result.run.resultCount ? "MATCHED" : "NO_RESULTS", resultCount: result.run.resultCount, message: result.run.resultCount ? `找到 ${result.run.resultCount} 位可能认识的内部同事` : "已完成匹配，未找到有共同经历的内部同事。" };
+  item = { ...item, employeeContacts: result.run.results.map(({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank }) => ({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank })) };
+  const message = result.run.resultCount ? `找到 ${result.run.resultCount} 位可能认识的内部同事` : "已完成匹配，未找到有共同经历的内部同事。";
+  return { ...item, status: result.run.resultCount ? "MATCHED" : "NO_RESULTS", resultCount: result.run.resultCount, message: result.reused ? `已复用已有匹配结果，未重复写入。${message}` : message };
 }
 
 export async function* processBatch(command: BatchCommand, actor: BatchActor, dependencies: BatchDependencies, signal?: AbortSignal): AsyncGenerator<BatchEvent> {
@@ -41,6 +41,7 @@ export async function* processBatch(command: BatchCommand, actor: BatchActor, de
     const row = command.kind === "workbook" ? command.rows[index] : null;
     let item: BatchItemResult = { index, label: row ? `${row.sheetName ? `${row.sheetName} · ` : ""}第 ${row.rowNumber} 行 · ${row.name || "未填写姓名"}` : command.kind === "import" ? command.files[index].name : `候选人 ${index + 1}`, queryId: null, status: "FAILED", message: "处理失败，请重试。", resultCount: 0 };
     if (row) item.workbookRow = { sheetName: row.sheetName ?? "", rowNumber: row.rowNumber, candidateName: row.name };
+    if (command.kind === "import") item.sourceFileName = command.files[index].name;
     try {
       if (row?.error) {
         item.message = row.error;
@@ -51,11 +52,15 @@ export async function* processBatch(command: BatchCommand, actor: BatchActor, de
         } else {
           item.queryId = submitted.query.id;
           const parsing = await dependencies.parse(item.queryId, actor.id);
+          if (parsing.kind === "profile") {
+            item.candidateName = parsing.profile.candidateName ?? undefined;
+            item.candidateFunctions = parsing.profile.researchFunctions;
+          }
           if (parsing.kind !== "profile") item.message = parsing.message;
           else if (parsing.profile.parseStatus === "FAILED" || parsing.profile.parseStatus === "INSUFFICIENT") {
             item = { ...item, status: "NEEDS_INPUT", message: "已保存简历，但无法提取足够经历；请打开详情检查或重新解析。" };
           } else {
-            item = { ...item, status: "IMPORTED", message: parsing.profile.parseStatus === "PARTIAL" ? "已导入并解析，部分经历信息缺失。" : "已导入并解析。" };
+            item = { ...item, status: "IMPORTED", message: submitted.reused ? "团队中已存在相同简历，已复用共享记录。" : parsing.profile.parseStatus === "PARTIAL" ? "已导入并解析，部分经历信息缺失。" : "已导入并解析。" };
             if (command.matchAfterImport) item = matchItem(item, actor.id, dependencies);
           }
         }
@@ -64,12 +69,10 @@ export async function* processBatch(command: BatchCommand, actor: BatchActor, de
         if (!dependencies.findQuery(queryId, actor.id)) item.message = "候选人不存在、已过期或无权访问。";
         else {
           item.queryId = queryId;
-          let profile = dependencies.findProfile(queryId, actor.id);
-          if (!profile) {
-            const parsed = await dependencies.parse(queryId, actor.id);
-            if (parsed.kind === "profile") profile = parsed.profile;
-          }
+          const parsed = await dependencies.parse(queryId, actor.id);
+          const profile = parsed.kind === "profile" ? parsed.profile : null;
           item.label = profile?.candidateName ?? item.label;
+          item.candidateFunctions = profile?.researchFunctions;
           item = profile ? matchItem(item, actor.id, dependencies) : { ...item, message: "画像生成失败，请在详情中重新解析。" };
         }
       }

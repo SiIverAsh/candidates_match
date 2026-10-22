@@ -6,6 +6,9 @@ import App from "./App";
 import "./styles/globals.css";
 import "./styles/ats.css";
 import "./styles/assistant-batch.css";
+import "./styles/matching-workspace.css";
+import "./styles/candidate-column-filters.css";
+import "./styles/research-functions.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element.");

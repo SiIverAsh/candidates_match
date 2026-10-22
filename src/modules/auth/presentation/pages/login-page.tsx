@@ -23,7 +23,7 @@ export function LoginPage({
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-panel-inner">
           <p className="eyebrow">安全访问</p>
-          <h2 id="login-title">登录工作台</h2>
+          <h2 id="login-title">登录人脉匹配</h2>
           <p className="panel-description">请输入已配置的内部测试账号。</p>
           <LoginForm onAuthenticated={onAuthenticated} />
         </div>

@@ -1,4 +1,6 @@
 import { DATE_RANGE_PATTERN } from "./dates";
+import { hasEnglishEmploymentRole } from "./english-experiences";
+import { isResumeSection } from "./resume-sections";
 
 export interface InferredEducation {
   school: string;
@@ -9,14 +11,13 @@ export interface InferredEducation {
 
 // Role evidence takes precedence over the institution name: a university can be an employer.
 export function hasEmploymentRole(value: string): boolean {
-  return /实习生|实习助理|工程师|经理|讲师|教师|教授|研究助理|助教|行政助理|\b(?:intern|engineer|manager|lecturer|professor|research assistant)\b/iu.test(value);
+  return /实习生|实习助理|工程师|经理|讲师|教师|教授|研究助理|助教|行政助理/u.test(value) || hasEnglishEmploymentRole(value);
 }
 
 const DATE_RANGE = new RegExp(DATE_RANGE_PATTERN, "iu");
 const DEGREE = /本科|学士|硕士(?:研究生)?|博士(?:研究生)?|大专|研究生|在读|\b(?:bachelor(?:'?s)?|master(?:'?s)?|ph\.?d\.?|b\.?sc\.?|m\.?sc\.?)\b/giu;
 const MAJOR_SIGNAL = /科学|工程|技术|管理|经济|金融|营销|医学|药学|免疫|肿瘤|药理|药物|设计|语言|英语|中文|法学|物理|数学|历史|哲学|艺术|化学|生物|心理|建筑|护理|教育|传播|统计|\b(?:science|engineering|business|administration|economics|law|medicine|immunology|oncology|pharmacology|biology|biochemistry|mathematics|physics|chemistry|psychology|history|arts?)\b/iu;
 const NARRATIVE = /负责|参与|合作|客户|项目|服务于|就职|任职|担任|授课|讲座|\b(?:worked|responsible|client|project|collaborated)\b/iu;
-const BOUNDARY = /^(?:工作经历|工作经验|职业经历|实习(?:经历|经验)?|教育(?:背景|经历)|技能|项目经历|个人简介|自我评价|获奖|证书|employment|work experience|internships?|education|skills?|projects?|summary)\s*[:：]?/iu;
 
 function schoolPrefix(value: string): { school: string; rest: string } | null {
   if (NARRATIVE.test(value)) return null;
@@ -41,7 +42,7 @@ function inferBlock(lines: string[]): Omit<InferredEducation, "lineCount"> | nul
   const rest = chunks.map((chunk, chunkIndex) => chunkIndex === index ? institution.rest : chunk);
   const hasDegree = rest.some((chunk) => Boolean(chunk.match(DEGREE)));
   if (!dates && !hasDegree) return null;
-  const majorParts = rest.map((chunk) => chunk.replace(DEGREE, "").trim()).filter(Boolean);
+  const majorParts = rest.map((chunk) => chunk.replace(DEGREE, "").replace(/[（(]\s*[）)]/gu, "").trim()).filter(Boolean);
   // Unknown adjacent prose is not silently turned into a major.
   if (majorParts.some((part) => !MAJOR_SIGNAL.test(part) || part.length > 80)) return null;
   return { school: institution.school, major: majorParts.join(" ") || null, dates };
@@ -52,7 +53,7 @@ export function inferEducationAt(lines: string[], index: number): InferredEducat
   let inferred: InferredEducation | null = null;
   for (let offset = 0; offset < 4 && index + offset < lines.length; offset++) {
     const line = lines[index + offset];
-    if (!line || BOUNDARY.test(line) || /^[^:：]{1,24}[:：]/u.test(line)) break;
+    if (!line || isResumeSection(line) || /^[^:：]{1,24}[:：]/u.test(line)) break;
     if (inferred && hasEmploymentRole(line)) {
       if (!inferred.major && !DATE_RANGE.test(line) && !schoolPrefix(line)) return null;
       break;

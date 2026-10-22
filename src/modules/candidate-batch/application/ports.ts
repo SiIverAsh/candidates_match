@@ -20,13 +20,13 @@ export interface CandidateWorkbookParser {
 }
 export interface BatchDependencies {
   submit(input: { actor: BatchActor; file: BatchFile | null; text: string | null; textOrigin?: "WORKBOOK_ROW" }): Promise<
-    { kind: "accepted"; query: CandidateQuery } | { kind: "rejected" | "persistence_failed"; message: string }
+    { kind: "accepted"; query: CandidateQuery; reused?: boolean } | { kind: "rejected" | "persistence_failed"; message: string }
   >;
   parse(queryId: string, actorId: string): Promise<
     { kind: "profile"; profile: CandidateProfile } | { kind: "not_found" | "persistence_failed"; message: string }
   >;
   match(queryId: string, actorId: string):
-    { kind: "matched"; run: MatchRun } | { kind: "no_employee_version" | "not_found" | "persistence_failed"; message: string };
+    { kind: "matched"; run: MatchRun; reused?: boolean } | { kind: "no_employee_version" | "not_found" | "persistence_failed"; message: string };
   findQuery(queryId: string, actorId: string): CandidateQuery | null;
   findProfile(queryId: string, actorId: string): CandidateProfile | null;
   record(actorId: string, outcome: string): void;
