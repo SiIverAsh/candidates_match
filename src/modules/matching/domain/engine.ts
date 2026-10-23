@@ -18,12 +18,15 @@ import type {
   MatchingContext,
 } from "../application/ports";
 import { MATCHING_CONFIG } from "./config";
+import { isSamePerson } from "../../../shared/domain/person-identity";
 import type {
   EmployeeMatchResult,
   EvidenceOverlap,
   MatchConfidence,
   MatchEvidence,
   MatchRun,
+  FunctionSimilarity,
+  WorkFunctionComparison,
 } from "./models";
 
 interface ComparableInterval {
@@ -82,8 +85,10 @@ function employeeInterval(
   startDate: string,
   endDate: string | null,
   referenceDate: string,
-): ComparableInterval {
-  return { start: startDate, end: endDate ?? referenceDate, precision: "DAY" };
+  current?: boolean,
+): ComparableInterval | null {
+  const precision = (value: string): DatePrecision => /^\d{4}$/.test(value) ? "YEAR" : /^\d{4}-\d{2}$/.test(value) ? "MONTH" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? "DAY" : "UNKNOWN";
+  return candidateInterval({ raw: null, start: startDate || null, end: endDate, current: current ?? endDate === null, startPrecision: precision(startDate), endPrecision: endDate ? precision(endDate) : "UNKNOWN" }, referenceDate);
 }
 
 function displayBoundary(value: string, precision: EvidenceOverlap["precision"]): string {
@@ -95,12 +100,14 @@ function overlap(
   employeeStart: string,
   employeeEnd: string | null,
   referenceDate: string,
+  employeeCurrent?: boolean,
 ): EvidenceOverlap | null {
   const left = candidateInterval(candidate, referenceDate);
   if (!left) return null;
-  const right = employeeInterval(employeeStart, employeeEnd, referenceDate);
+  const right = employeeInterval(employeeStart, employeeEnd, referenceDate, employeeCurrent);
+  if (!right) return null;
   const start = left.start > right.start ? left.start : right.start;
-  const end = left.end < right.end ? left.end : right.end;
+  const end = [left.end, right.end, referenceDate].sort()[0];
   if (start > end) return null;
   const precision = coarsePrecision(left.precision, right.precision);
   if (!precision) return null;
@@ -141,41 +148,10 @@ function workEvidence(
   employee: EmployeeWorkSnapshot,
   referenceDate: string,
 ): MatchEvidence | null {
-  const candidateCompany = candidate.company.value;
+  const candidateCompany = normalizeCompany(candidate.company.raw).value;
   const employeeCompany = normalizeCompany(employee.company);
   if (!candidateCompany || !sameNormalized(candidateCompany, employeeCompany.value)) return null;
-  const sharedTime = overlap(candidate.dates, employee.startDate, employee.endDate, referenceDate);
-  const employeeFunction = normalizeFunction(employee.title);
-  const sameFunction = Boolean(
-    candidate.normalizedFunction.value &&
-    employeeFunction.value &&
-    candidate.normalizedFunction.value === employeeFunction.value,
-  );
-  if (sharedTime && sameFunction) {
-    return {
-      id: evidenceId(["work-function", candidate.sequence, employee.sequence]),
-      type: "WORK_COMPANY_FUNCTION_OVERLAP",
-      strength: "MEDIUM",
-      score: MATCHING_CONFIG.weights.workCompanyFunctionOverlap,
-      candidateSourceFields: [
-        `workExperiences[${candidate.sequence}].company.raw`,
-        `workExperiences[${candidate.sequence}].rawTitle`,
-        `workExperiences[${candidate.sequence}].dates.raw`,
-      ],
-      employeeSourceFields: [
-        `work_experiences[${employee.sequence}].company`,
-        `work_experiences[${employee.sequence}].title`,
-        `work_experiences[${employee.sequence}].start_date`,
-        `work_experiences[${employee.sequence}].end_date`,
-      ],
-      normalizedValues: {
-        company: candidateCompany,
-        function: candidate.normalizedFunction.value!,
-      },
-      overlap: sharedTime,
-      reason: `两人曾在 ${candidateCompany} 任职，${periodText(sharedTime)}，职位职能相近。`,
-    };
-  }
+  const sharedTime = overlap(candidate.dates, employee.startDate, employee.endDate, referenceDate, employee.current);
   if (sharedTime) {
     return {
       id: evidenceId(["work-overlap", candidate.sequence, employee.sequence]),
@@ -209,6 +185,49 @@ function workEvidence(
   };
 }
 
+function compareWorkFunctions(
+  candidate: CandidateWorkExperience,
+  employee: EmployeeWorkSnapshot,
+  evidence: MatchEvidence,
+): WorkFunctionComparison {
+  const candidateFunction = normalizeFunction(candidate.rawTitle);
+  const employeeFunction = normalizeFunction(employee.title);
+  const known = candidateFunction.confidence === "HIGH" && employeeFunction.confidence === "HIGH";
+  const status = !known ? "UNKNOWN"
+    : candidateFunction.value === employeeFunction.value ? "SAME_CATEGORY" : "DIFFERENT_CATEGORY";
+  const bonus = status === "SAME_CATEGORY" && evidence.overlap ? MATCHING_CONFIG.weights.workFunctionSimilarityBonus : 0;
+  const reason = status === "UNKNOWN" ? "职位职能缺失、未识别或存在多个大类，不加分。"
+    : status === "DIFFERENT_CATEGORY" ? "职位职能大类不同，不加分。"
+    : evidence.overlap ? "同公司且任职时间重叠，职位职能大类相同，辅助加分；尚不能判断职位高度相近。"
+    : "职位职能大类相同，但没有可确认的任职时间重叠，不加分。";
+  return {
+    company: evidence.normalizedValues.company,
+    candidateTitle: candidate.rawTitle, employeeTitle: employee.title,
+    candidateFunction: candidateFunction.value, employeeFunction: employeeFunction.value,
+    status, overlap: evidence.overlap, bonus, reason,
+    candidateSourceFields: [...evidence.candidateSourceFields, `workExperiences[${candidate.sequence}].rawTitle`],
+    employeeSourceFields: [...evidence.employeeSourceFields, `work_experiences[${employee.sequence}].title`],
+  };
+}
+
+function summarizeFunctionSimilarity(comparisons: WorkFunctionComparison[]): FunctionSimilarity {
+  // Duplicate resume rows must not multiply the bonus for one company and period.
+  const bonuses = new Map<string, number>();
+  const unique = new Map<string, WorkFunctionComparison>();
+  for (const item of comparisons) {
+    const period = JSON.stringify({ company: item.company, overlap: item.overlap });
+    bonuses.set(period, Math.max(bonuses.get(period) ?? 0, item.bonus));
+    const key = JSON.stringify({ period, candidateTitle: item.candidateTitle, employeeTitle: item.employeeTitle });
+    if (!unique.has(key)) unique.set(key, item);
+  }
+  return {
+    status: comparisons.some(item => item.status === "SAME_CATEGORY") ? "SAME_CATEGORY"
+      : comparisons.some(item => item.status === "DIFFERENT_CATEGORY") ? "DIFFERENT_CATEGORY" : "UNKNOWN",
+    bonus: [...bonuses.values()].reduce((total, bonus) => total + bonus, 0),
+    comparisons: [...unique.values()],
+  };
+}
+
 function educationEvidence(
   candidate: CandidateEducationExperience,
   employee: EmployeeEducationSnapshot,
@@ -220,7 +239,7 @@ function educationEvidence(
   const candidateMajor = candidate.major.value;
   const employeeMajor = normalizeMajor(employee.major);
   const sameMajor = sameNormalized(candidateMajor, employeeMajor.value);
-  const sharedTime = overlap(candidate.dates, employee.startDate, employee.endDate, referenceDate);
+  const sharedTime = overlap(candidate.dates, employee.startDate, employee.endDate, referenceDate, employee.current);
   if (sharedTime && sameMajor) {
     return {
       id: evidenceId(["education-major", candidate.sequence, employee.sequence]),
@@ -300,11 +319,16 @@ function matchEmployee(
   context: MatchingContext,
   employee: EmployeeSnapshot,
 ): Omit<EmployeeMatchResult, "rank"> | null {
+  if (isSamePerson(context.profile.identity, employee)) return null;
   const evidence: MatchEvidence[] = [];
+  const functionComparisons: WorkFunctionComparison[] = [];
   for (const candidateWork of context.profile.workExperiences) {
     for (const employeeWork of employee.workExperiences) {
       const item = workEvidence(candidateWork, employeeWork, context.submittedAt.slice(0, 10));
-      if (item) evidence.push(item);
+      if (item) {
+        evidence.push(item);
+        functionComparisons.push(compareWorkFunctions(candidateWork, employeeWork, item));
+      }
     }
   }
   for (const candidateEducation of context.profile.educations) {
@@ -320,7 +344,9 @@ function matchEmployee(
   const uniqueEvidence = deduplicateEvidence(evidence);
   if (uniqueEvidence.length === 0) return null;
   uniqueEvidence.sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
-  const score = Math.min(100, uniqueEvidence.reduce((total, item) => total + item.score, 0));
+  const relationshipScore = uniqueEvidence.reduce((total, item) => total + item.score, 0);
+  const functionSimilarity = summarizeFunctionSimilarity(functionComparisons);
+  const score = Math.min(100, relationshipScore + functionSimilarity.bonus);
   return {
     employeeId: employee.employeeId,
     name: employee.name,
@@ -328,6 +354,8 @@ function matchEmployee(
     currentDepartment: employee.currentDepartment,
     currentTitle: employee.currentTitle,
     score,
+    relationshipScore,
+    functionSimilarity,
     confidence: confidence(score, uniqueEvidence),
     evidence: uniqueEvidence,
   };

@@ -67,13 +67,14 @@ export async function ensureCandidateResearchFunctions(
 ): Promise<CandidateProfile | null> {
   const now = dependencies.now().toISOString();
   const existing = dependencies.repository.findProfile(queryId, requestedBy, now);
-  if (existing?.researchFunctions || !dependencies.functionClassifier) return existing;
+  if (existing?.identity && (existing.researchFunctions || !dependencies.functionClassifier)) return existing;
   if (!existing) {
     const result = await parseCandidateQuery(queryId, requestedBy, dependencies, true);
     if (result.kind === "persistence_failed") throw new Error("FUNCTION_ASSESSMENT_SAVE_FAILED");
     if (result.kind === "not_found") return null;
     // Another request may have saved a legacy profile while extraction was running.
-    return result.profile.researchFunctions ? result.profile : ensureCandidateResearchFunctions(queryId, requestedBy, dependencies);
+    return result.profile.identity && (result.profile.researchFunctions || !dependencies.functionClassifier)
+      ? result.profile : ensureCandidateResearchFunctions(queryId, requestedBy, dependencies);
   }
 
   const source = dependencies.repository.findSource(queryId, requestedBy, now);
@@ -83,6 +84,8 @@ export async function ensureCandidateResearchFunctions(
   const extraction = await dependencies.extractor.extract(source);
   const parsed = extraction.ok ? dependencies.parser.parse(source, extraction.text, now)
     : dependencies.parser.failed(source, now, extraction.message);
+  const identified = existing.identity ? existing : dependencies.repository.saveIdentity(queryId, parsed.identity ?? {}, requestedBy, now);
+  if (!identified || identified.researchFunctions || !dependencies.functionClassifier) return identified;
   const enriched = addResearchFunctions(parsed, dependencies);
   return dependencies.repository.saveFunctionAssessment(queryId, enriched.researchFunctions!, requestedBy, dependencies.now().toISOString());
 }

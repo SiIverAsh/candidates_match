@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { ResumeSourceRepository } from "../../application/ports";
 import type { CandidateProfile, ResumeSource } from "../../domain/models";
 import type { ResearchFunctionAssessment } from "../../../research-functions/domain/models";
+import type { PersonIdentity } from "../../../../shared/domain/person-identity";
 
 const globalForResumeParser = globalThis as unknown as { resumeParserDatabase?: DatabaseSync };
 
@@ -153,7 +154,8 @@ export function findMissingFunctionQueryIds(now: string): string[] {
   return (database.prepare(`
     SELECT q.id FROM candidate_queries q
     LEFT JOIN candidate_profiles p ON p.query_id = q.id AND p.expires_at > ?
-    WHERE q.expires_at > ? AND json_extract(p.profile_json, '$.researchFunctions') IS NULL
+    WHERE q.expires_at > ? AND (json_extract(p.profile_json, '$.researchFunctions') IS NULL
+      OR json_extract(p.profile_json, '$.identity') IS NULL)
     ORDER BY q.submitted_at DESC, q.id
   `).all(now, now) as Array<{ id: string }>).map(row => row.id);
 }
@@ -187,10 +189,26 @@ export function saveFunctionAssessment(queryId: string, assessment: ResearchFunc
   }
 }
 
+export function saveCandidateIdentity(queryId: string, identity: PersonIdentity, requestedBy: string, now: string): CandidateProfile | null {
+  const database = getDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const existing = findCandidateProfile(queryId, requestedBy, now);
+    if (!existing || existing.identity) { database.exec("COMMIT"); return existing; }
+    database.prepare(`UPDATE candidate_profiles SET profile_json = json_set(profile_json, '$.identity', json(?))
+      WHERE query_id = ? AND expires_at > ?`).run(JSON.stringify(identity), queryId, now);
+    database.prepare(`INSERT INTO audit_events (id, actor_id, action_type, resource_ref, outcome, created_at)
+      VALUES (?, ?, 'CANDIDATE_IDENTITY_EXTRACTED', ?, 'SUCCESS', ?)`).run(crypto.randomUUID(), requestedBy, queryId, now);
+    database.exec("COMMIT");
+    return { ...existing, identity };
+  } catch (error) { database.exec("ROLLBACK"); throw error; }
+}
+
 export const resumeSourceRepository: ResumeSourceRepository = {
   findSource: findResumeSource,
   findProfile: findCandidateProfile,
   saveProfile: saveCandidateProfile,
   findMissingFunctionQueryIds,
   saveFunctionAssessment,
+  saveIdentity: saveCandidateIdentity,
 };

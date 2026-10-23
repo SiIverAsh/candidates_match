@@ -23,6 +23,14 @@ function result(
     rank,
     score: confidence === "HIGH" ? 80 : confidence === "MEDIUM" ? 50 : 20,
     confidence,
+    relationshipScore: 25,
+    functionSimilarity: { status: "SAME_CATEGORY", bonus: 20, comparisons: [{
+      company: "示例公司", candidateTitle: "产品经理", employeeTitle: "Product Manager",
+      candidateFunction: "产品", employeeFunction: "产品", status: "SAME_CATEGORY",
+      overlap: { start: "2020", end: "2021", precision: "YEAR", months: null },
+      bonus: 20, reason: "同公司且时间重叠，职位职能大类相同，辅助加分。",
+      candidateSourceFields: [], employeeSourceFields: [],
+    }] },
     evidence: [{
       id: `evidence-${employeeId}`,
       type: "WORK_COMPANY_OVERLAP",
@@ -78,6 +86,10 @@ const emptyGroups = groupMatchResults({ ...run, status: "NO_RESULTS", resultCoun
 assert.deepEqual(emptyGroups.map((group) => group.results.length), [0, 0, 0]);
 
 const inline = renderToStaticMarkup(createElement(InlineMatchResults, { run }));
+assert.ok(inline.includes("职能相似度"));
+assert.ok(inline.includes("经历证据 25 分 ＋ 职能辅助加分 20 分"));
+assert.ok(inline.includes("Product Manager"));
+assert.ok(inline.includes("不能单独据此推断双方认识"));
 assert.equal((inline.match(/class="confidence-group (?:high|medium|low)" open=""/g) ?? []).length, 3,
   "单份简历结果应默认展开高、中、低三组");
 for (const employee of sourceOrder) {

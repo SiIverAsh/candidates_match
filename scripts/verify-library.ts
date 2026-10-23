@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 
 const directory = mkdtempSync(path.join(tmpdir(), "cf-library-"));
 process.env.CONNECTION_FINDER_DB_PATH = path.join(directory, "test.sqlite");
@@ -58,6 +59,24 @@ try {
   const match = matching.run(submitted[0].id, actor.id);
   assert.equal(match.kind, "matched");
   if (match.kind === "matched") assert.ok(match.run.resultCount > 0);
+  if (match.kind === "matched") {
+    const database = new DatabaseSync(process.env.CONNECTION_FINDER_DB_PATH!);
+    const legacy = { ...match.run, ruleVersion: "matching-rules-v1", results: match.run.results.map(({ relationshipScore: _relationshipScore, functionSimilarity: _functionSimilarity, ...result }) => result) };
+    database.prepare("UPDATE match_runs SET rule_version = ?, run_json = ? WHERE query_id = ?").run(legacy.ruleVersion, JSON.stringify(legacy), submitted[0].id);
+    database.prepare("UPDATE candidate_profiles SET profile_json = json_remove(profile_json, '$.identity') WHERE query_id = ?").run(submitted[0].id);
+    const identified = await parser.ensureFunctions(submitted[0].id, actor.id);
+    assert.equal(identified?.identity?.resumeFingerprint?.length, 20, "旧资料应从原文补齐身份信息");
+    assert.equal(identified?.parsedAt, parsed.kind === "profile" ? parsed.profile.parsedAt : "", "身份补齐不能重写原画像解析时间");
+    assert.equal(database.prepare("SELECT id FROM match_runs WHERE query_id = ?").get(submitted[0].id)?.id, legacy.id, "身份补齐本身不应删除匹配历史");
+    const refreshed = matching.getRun(submitted[0].id, actor.id)!;
+    assert.equal(refreshed.ruleVersion, "matching-rules-v4", "读取旧版结果应重算，而非复用旧规则");
+    assert.notEqual(refreshed.id, legacy.id);
+    assert.equal(refreshed.results[0].functionSimilarity?.bonus, 20);
+    assert.equal(matching.run(submitted[0].id, actor.id).kind, "matched");
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM match_runs WHERE query_id = ?").get(submitted[0].id)?.count, 1);
+    assert.equal(matching.getRun(submitted[0].id, actor.id)?.id, refreshed.id, "新版结果应复用");
+    database.close();
+  }
   assert.equal(candidates.list(actor.id, { search: "测试候选人" }).total, 21, "候选人搜索也应覆盖尚未解析的文本来源资料");
   assert.equal(candidates.list(actor.id, { search: "%" }).total, 0);
   assert.equal(candidates.list(actor.id, { resultsOnly: true }).total, 1);

@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { registerTextSearch } from "../../../../shared/infrastructure/sqlite/text-search";
+import { EmployeeImportConflict } from "../../domain/resume-import";
 
 import type { ImportActor, ImportFailureCode } from "../../application/ports";
 
@@ -98,13 +99,24 @@ function getDatabase(): DatabaseSync {
       CREATE INDEX IF NOT EXISTS work_experiences_by_employee ON work_experiences(version_id, employee_id);
       CREATE INDEX IF NOT EXISTS education_experiences_by_employee ON education_experiences(version_id, employee_id);
     `);
+    const additions = {
+      employees: { profile_url: "TEXT NOT NULL DEFAULT ''", warnings_json: "TEXT NOT NULL DEFAULT '[]'", resume_text: "TEXT NOT NULL DEFAULT ''", resume_fingerprint: "TEXT NOT NULL DEFAULT ''" },
+      work_experiences: { current: "INTEGER", description: "TEXT NOT NULL DEFAULT ''" },
+      education_experiences: { current: "INTEGER", degree: "TEXT NOT NULL DEFAULT ''" },
+    };
+    for (const [table, definitions] of Object.entries(additions)) {
+      const columns = new Set((database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(column => column.name));
+      for (const [column, definition] of Object.entries(definitions)) {
+        if (!columns.has(column)) database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      }
+    }
     globalForEmployeeData.employeeDataDatabase = database;
   }
   return globalForEmployeeData.employeeDataDatabase;
 }
 
 function employeeFromRow(row: Record<string, unknown>): EmployeeRecord {
-  return { employeeId: String(row.employee_id), name: String(row.name), email: String(row.email), currentDepartment: String(row.current_department), currentTitle: String(row.current_title) };
+  return { employeeId: String(row.employee_id), name: String(row.name), email: String(row.email), currentDepartment: String(row.current_department), currentTitle: String(row.current_title), profileUrl: String(row.profile_url), resumeFingerprint: row.resume_fingerprint ? String(row.resume_fingerprint) : null, warnings: JSON.parse(String(row.warnings_json)) as string[], ...(row.resume_text ? { sourceText: String(row.resume_text) } : {}) };
 }
 
 export function listCurrentEmployees(page: number, search: string): EmployeeDirectoryPage {
@@ -118,7 +130,7 @@ export function listCurrentEmployees(page: number, search: string): EmployeeDire
   const where = `e.version_id = ?${searchWhere}`;
   const params = [version.id, ...(search ? [search] : [])];
   const count = database.prepare(`SELECT COUNT(*) AS total FROM employees e WHERE ${where}`).get(...params) as { total: number };
-  const rows = database.prepare(`SELECT e.* FROM employees e WHERE ${where} ORDER BY e.employee_id LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
+  const rows = database.prepare(`SELECT e.employee_id, e.name, e.email, e.current_department, e.current_title, e.profile_url, e.warnings_json FROM employees e WHERE ${where} ORDER BY e.employee_id LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
   return { versionId: version.id, items: rows.map(employeeFromRow), total: Number(count.total), page, pageSize };
 }
 
@@ -130,8 +142,8 @@ export function findEmployeeProfile(employeeId: string, versionId: string): Empl
   const educationRows = database.prepare("SELECT * FROM education_experiences WHERE version_id = ? AND employee_id = ? ORDER BY start_date DESC, id DESC").all(versionId, employeeId) as Record<string, unknown>[];
   return {
     ...employeeFromRow(row), versionId,
-    workExperiences: workRows.map((work) => ({ employeeId, company: String(work.company), title: String(work.title), startDate: String(work.start_date), endDate: work.end_date as string | null })),
-    educations: educationRows.map((education) => ({ employeeId, school: String(education.school), major: String(education.major), startDate: String(education.start_date), endDate: education.end_date as string | null })),
+    workExperiences: workRows.map((work) => ({ employeeId, company: String(work.company), title: String(work.title), startDate: String(work.start_date), endDate: work.end_date as string | null, current: work.current === null ? work.end_date === null : Boolean(work.current), description: String(work.description) })),
+    educations: educationRows.map((education) => ({ employeeId, school: String(education.school), major: String(education.major), startDate: String(education.start_date), endDate: education.end_date as string | null, current: education.current === null ? education.end_date === null : Boolean(education.current), degree: String(education.degree) })),
   };
 }
 
@@ -215,51 +227,78 @@ export function publishEmployeeData(
   data: ParsedEmployeeData,
   actor: ImportActor,
 ): EmployeeDataVersionSummary {
+  return publishData(data, actor, false);
+}
+
+export function appendEmployeeData(data: ParsedEmployeeData, actor: ImportActor): EmployeeDataVersionSummary {
+  return publishData(data, actor, true);
+}
+
+function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boolean): EmployeeDataVersionSummary {
   const database = getDatabase();
   const importedAt = new Date().toISOString();
   const id = createVersionId(importedAt);
   database.exec("BEGIN IMMEDIATE");
   try {
+    const active = append ? getEmployeeDataOverview().activeVersion : null;
+    if (active) {
+      for (const employee of data.employees) {
+        const duplicate = database.prepare("SELECT employee_id FROM employees WHERE version_id = ? AND (employee_id = ? OR (? <> '' AND lower(email) = lower(?)) OR (? <> '' AND profile_url = ?))").get(active.id, employee.employeeId, employee.email, employee.email, employee.profileUrl ?? "", employee.profileUrl ?? "");
+        if (duplicate) throw new EmployeeImportConflict("员工编号或邮箱已存在，请核对；本次未覆盖已有员工。");
+      }
+    }
+    const employeeCount = (active?.employeeCount ?? 0) + data.employees.length;
+    const workCount = (active?.workExperienceCount ?? 0) + data.workExperiences.length;
+    const educationCount = (active?.educationCount ?? 0) + data.educationExperiences.length;
+    if (append && (employeeCount > 10_000 || workCount > 50_000 || educationCount > 50_000)) throw new EmployeeImportConflict("员工库已达到数据量上限，无法继续追加。");
     database.prepare(`
       INSERT INTO employee_data_versions (
         id, status, imported_at, imported_by_id, imported_by_name,
         employee_count, work_experience_count, education_count
       ) VALUES (?, 'ARCHIVED', ?, ?, ?, ?, ?, ?)
     `).run(
-      id, importedAt, actor.id, actor.displayName, data.employees.length,
-      data.workExperiences.length, data.educationExperiences.length,
+      id, importedAt, actor.id, actor.displayName, employeeCount,
+      workCount, educationCount,
     );
+    if (active) {
+      database.prepare(`INSERT INTO employees (version_id, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint)
+        SELECT ?, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint FROM employees WHERE version_id = ?`).run(id, active.id);
+      database.prepare(`INSERT INTO work_experiences (version_id, employee_id, company, title, start_date, end_date, current, description)
+        SELECT ?, employee_id, company, title, start_date, end_date, current, description FROM work_experiences WHERE version_id = ?`).run(id, active.id);
+      database.prepare(`INSERT INTO education_experiences (version_id, employee_id, school, major, start_date, end_date, current, degree)
+        SELECT ?, employee_id, school, major, start_date, end_date, current, degree FROM education_experiences WHERE version_id = ?`).run(id, active.id);
+    }
     const employeeStatement = database.prepare(`
       INSERT INTO employees (
-        version_id, employee_id, name, email, current_department, current_title
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        version_id, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const employee of data.employees) {
       employeeStatement.run(
         id, employee.employeeId, employee.name, employee.email,
-        employee.currentDepartment, employee.currentTitle,
+        employee.currentDepartment, employee.currentTitle, employee.profileUrl ?? "", JSON.stringify(employee.warnings ?? []), employee.sourceText ?? "", employee.resumeFingerprint ?? "",
       );
     }
     const workStatement = database.prepare(`
       INSERT INTO work_experiences (
-        version_id, employee_id, company, title, start_date, end_date
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        version_id, employee_id, company, title, start_date, end_date, current, description
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const experience of data.workExperiences) {
       workStatement.run(
         id, experience.employeeId, experience.company, experience.title,
-        experience.startDate, experience.endDate,
+        experience.startDate, experience.endDate, experience.current === undefined ? null : Number(experience.current), experience.description ?? "",
       );
     }
     const educationStatement = database.prepare(`
       INSERT INTO education_experiences (
-        version_id, employee_id, school, major, start_date, end_date
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        version_id, employee_id, school, major, start_date, end_date, current, degree
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const education of data.educationExperiences) {
       educationStatement.run(
         id, education.employeeId, education.school, education.major,
-        education.startDate, education.endDate,
+        education.startDate, education.endDate, education.current === undefined ? null : Number(education.current), education.degree ?? "",
       );
     }
     database.prepare(
@@ -280,18 +319,11 @@ export function publishEmployeeData(
       ) VALUES (?, ?, 'EMPLOYEE_DATA_IMPORT', ?, 'PUBLISHED', ?)
     `).run(crypto.randomUUID(), actor.id, id, importedAt);
     database.exec("COMMIT");
+    return { id, importedAt, importedBy: actor.displayName, employeeCount, workExperienceCount: workCount, educationCount };
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;
   }
-  return {
-    id,
-    importedAt,
-    importedBy: actor.displayName,
-    employeeCount: data.employees.length,
-    workExperienceCount: data.workExperiences.length,
-    educationCount: data.educationExperiences.length,
-  };
 }
 
 

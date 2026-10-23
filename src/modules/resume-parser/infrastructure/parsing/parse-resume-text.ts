@@ -1,6 +1,8 @@
 import { DATE_RANGE_PATTERN, parseDateRange } from "../../domain/dates";
+import { extractResumeIdentity, inferResumeName, RESUME_IDENTITY_FIELD } from "../../domain/identity";
+import { createHash } from "node:crypto";
 import { hasEmploymentRole, inferEducationAt } from "../../domain/infer-education";
-import { englishEducationMajor, hasEnglishDegree, hasEnglishEmploymentRole, inferEnglishEducationAt, inferEnglishWorkAt } from "../../domain/english-experiences";
+import { educationDegree, englishEducationMajor, hasEnglishDegree, hasEnglishEmploymentRole, inferEnglishEducationAt, inferEnglishWorkAt } from "../../domain/english-experiences";
 import { EDUCATION_SECTION, EXPERIENCE_DESCRIPTION, OTHER_SECTION, WORK_SECTION, isResumeSection } from "../../domain/resume-sections";
 import type {
   CandidateEducationExperience,
@@ -16,10 +18,10 @@ import {
   normalizeSchool,
 } from "../../domain/normalization";
 
-export const PARSER_VERSION = "resume-heuristic-v10";
+export const PARSER_VERSION = "resume-heuristic-v13";
 
 interface WorkDraft { company: string | null; title: string | null; dates: string | null; description: string[] }
-interface EducationDraft { school: string | null; major: string | null; dates: string | null }
+interface EducationDraft { school: string | null; major: string | null; dates: string | null; degree?: string | null }
 type Section = "work" | "education" | "other" | null;
 
 const EMPTY_WORK = (): WorkDraft => ({ company: null, title: null, dates: null, description: [] });
@@ -29,7 +31,7 @@ const COMPANY_LABEL = /^(?:公司|单位|雇主|实习公司|实习单位|compan
 const EDUCATION_FIELD = /^(?:学位|学历|专业|主修|就读时间|教育时间|时间|日期|degree|qualification|major|field of study|period|date)\s*[:：]/iu;
 const INSTITUTION = /大学|学院|学校|中学|\b(?:university|college|institute|school|academy|polytechnic)\b/iu;
 const NARRATIVE_HEADING = /^(?:负责|参与|发表|完成|获得|published\b|led\b|conducted\b|developed\b|worked\b)/iu;
-const FIELD_LABEL = /^(?:姓名|候选人|公司|单位|雇主|实习公司|实习单位|职位|职务|岗位|实习职位|实习岗位|学校|院校|大学|专业|主修|任职时间|工作时间|实习时间|实习日期|就读时间|教育时间|时间|日期|name|full name|candidate name|company|employer|organi[sz]ation|(?:job )?title|position|role|school|university|college|institution|major|field of study|degree|qualification|program(?:me)?|(?:employment |education |study )?(?:period|dates?)|duration|date range)\s*[:：]/iu;
+const FIELD_LABEL = /^(?:姓名|候选人|公司|单位|雇主|实习公司|实习单位|职位|职务|岗位|实习职位|实习岗位|学校|院校|大学|专业|主修|学位|学历|任职时间|工作时间|实习时间|实习日期|就读时间|教育时间|时间|日期|name|full name|candidate name|company|employer|organi[sz]ation|(?:job )?title|position|role|school|university|college|institution|major|field of study|degree|qualification|program(?:me)?|(?:employment |education |study )?(?:period|dates?)|duration|date range)\s*[:：]/iu;
 
 function resumeLines(text: string): string[] {
   return text.split(/\r?\n/gu).flatMap((line) => {
@@ -90,6 +92,7 @@ function educationExperience(
     sequence,
     school: normalizeSchool(draft.school),
     major: normalizeMajor(draft.major),
+    degree: draft.degree ?? null,
     dates: parseDateRange(draft.dates),
   };
 }
@@ -99,7 +102,7 @@ export function parseResumeText(
   text: string,
   parsedAt: string,
 ): CandidateProfile {
-  let candidateName: string | null = null;
+  let candidateName: string | null = inferResumeName(text);
   let section: Section = null;
   // Keep explicit headings separate from classifications inferred from individual rows.
   let explicitSection: Section = null;
@@ -124,6 +127,14 @@ export function parseResumeText(
 
     const name = valueAfterLabel(line, "姓名|候选人|name|full name|candidate name");
     if (name) { candidateName = name; continue; }
+    if (RESUME_IDENTITY_FIELD.test(line)) continue;
+    const degreeField = valueAfterLabel(line, "学位|学历");
+    if (degreeField && section === "education") {
+      currentEducation.degree = degreeField;
+      const programMajor = englishEducationMajor(degreeField);
+      if (programMajor && !currentEducation.major && !/^(?:博士后|博士|硕士|本科|学士|大专|专科)$/u.test(degreeField)) currentEducation.major = programMajor;
+      continue;
+    }
 
     const workSection = line.match(WORK_SECTION);
     if (workSection) {
@@ -206,7 +217,7 @@ export function parseResumeText(
       flushWork();
       flushEducation();
       section = "education";
-      currentEducation = { school: inferredEducation.school, major: inferredEducation.major, dates: inferredEducation.dates };
+      currentEducation = { school: inferredEducation.school, major: inferredEducation.major, dates: inferredEducation.dates, degree: educationDegree(nearbyLines.slice(0, inferredEducation.lineCount).join("\n")) };
       lineIndex += inferredEducation.lineCount - 1;
       continue;
     }
@@ -225,7 +236,7 @@ export function parseResumeText(
     const parts = compactParts(line);
     if (parts.length >= 3 && looksLikeDateRange(parts[0])) {
       // Explicit internship roles are employment even if a section heading was lost.
-      if (explicitSection !== "education" && hasEmploymentRole(parts.slice(2).join(" "))) {
+      if (hasEmploymentRole(parts.slice(2).join(" "))) {
         flushEducation();
         section = "work";
       }
@@ -234,7 +245,7 @@ export function parseResumeText(
         currentWork = { dates: parts[0], company: parts[1], title: parts.slice(2).join(" "), description: [] };
       } else if (section === "education") {
         flushEducation();
-        currentEducation = { dates: parts[0], school: parts[1], major: parts.slice(2).join(" ") };
+        currentEducation = { dates: parts[0], school: parts[1], major: parts.slice(2).join(" "), degree: educationDegree(parts.slice(2).join(" ")) };
       }
       continue;
     }
@@ -258,11 +269,12 @@ export function parseResumeText(
       continue;
     }
     const major = valueAfterLabel(line, "专业|主修|major|field of study");
-    if (major) { section = "education"; currentEducation.major = major; continue; }
-    const program = valueAfterLabel(line, "degree|qualification|program(?:me)?");
+    if (major) { section = "education"; currentEducation.major = major; currentEducation.degree ??= educationDegree(major); continue; }
+    const program = valueAfterLabel(line, "学位|学历|degree|qualification|program(?:me)?");
     if (program && section === "education") {
+      currentEducation.degree = program;
       const programMajor = englishEducationMajor(program);
-      if (programMajor) currentEducation.major = programMajor;
+      if (programMajor && !currentEducation.major && !/^(?:博士后|博士|硕士|本科|学士|大专|专科)$/u.test(program)) currentEducation.major = programMajor;
       continue;
     }
     const dates = valueAfterLabel(
@@ -328,6 +340,7 @@ export function parseResumeText(
     sourceType: source.sourceType,
     sourceFormat: source.sourceFormat,
     candidateName,
+    identity: { ...extractResumeIdentity(text), resumeFingerprint: createHash("sha256").update(text).digest("hex").slice(0, 20) },
     parseStatus,
     completeness,
     warnings,
@@ -350,6 +363,7 @@ export function failedCandidateProfile(
     sourceType: source.sourceType,
     sourceFormat: source.sourceFormat,
     candidateName: null,
+    identity: {},
     parseStatus: "FAILED",
     completeness: {
       hasName: false,

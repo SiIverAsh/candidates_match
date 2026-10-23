@@ -4,6 +4,10 @@ export interface EmployeeRecord {
   email: string;
   currentDepartment: string;
   currentTitle: string;
+  profileUrl?: string;
+  warnings?: string[];
+  sourceText?: string;
+  resumeFingerprint?: string | null;
 }
 
 export interface WorkExperienceRecord {
@@ -12,6 +16,8 @@ export interface WorkExperienceRecord {
   title: string;
   startDate: string;
   endDate: string | null;
+  current?: boolean;
+  description?: string;
 }
 
 export interface EducationRecord {
@@ -20,6 +26,8 @@ export interface EducationRecord {
   major: string;
   startDate: string;
   endDate: string | null;
+  current?: boolean;
+  degree?: string;
 }
 
 export interface ParsedEmployeeData {

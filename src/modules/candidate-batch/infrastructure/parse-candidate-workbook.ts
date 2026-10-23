@@ -76,7 +76,7 @@ export const candidateWorkbookParser: CandidateWorkbookParser = {
     if (!tables.length) throw new BatchInputError("未识别到候选人表头。请在工作表前 20 行内提供姓名，以及工作经历、教育经历、公司、学校或简历内容等列；列顺序不限。");
     const rows: WorkbookCandidateRow[] = [];
     for (const { sheet, header } of tables) {
-      const keys = header.columns.map(column => `${["name", "email", "phone", "resume"].includes(column.field) ? 1 : column.group}:${column.field}`);
+      const keys = header.columns.map(column => `${["name", "email", "phone", "resume", "profileUrl", "employeeId"].includes(column.field) ? 1 : column.group}:${column.field}`);
       if (new Set(keys).size !== keys.length) throw new BatchInputError(`“${sheet.name}”第 ${header.rowNumber} 行存在重复含义的列；多段经历请标为“公司1、职位1、公司2、职位2”等。`);
       sheet.eachRow((sourceRow, rowNumber) => {
         if (rowNumber <= header.rowNumber) return;

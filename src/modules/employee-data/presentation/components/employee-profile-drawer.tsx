@@ -46,16 +46,18 @@ export function EmployeeProfileDrawer({ employee, versionId, onClose }: {
               <dl>
                 <div><dt>员工编号</dt><dd>{profile.employeeId}</dd></div>
                 <div><dt>姓名</dt><dd>{profile.name}</dd></div>
-                <div><dt>当前部门</dt><dd>{profile.currentDepartment}</dd></div>
-                <div><dt>当前职位</dt><dd>{profile.currentTitle}</dd></div>
-                <div className="employee-email"><dt>工作邮箱</dt><dd>{profile.email}</dd></div>
+                <div><dt>当前部门</dt><dd>{profile.currentDepartment || "未提供"}</dd></div>
+                <div><dt>当前职位</dt><dd>{profile.currentTitle || "未提供"}</dd></div>
+                <div className="employee-email"><dt>工作邮箱</dt><dd>{profile.email || "未提供"}</dd></div>
               </dl>
             </section>
+            {profile.warnings?.length ? <section className="parse-warning"><strong>解析提示</strong><ul>{profile.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></section> : null}
             <section className="employee-history" aria-label="工作经历">
               <h3><Briefcase size={16} />工作经历 <span>{profile.workExperiences.length}</span></h3>
               {profile.workExperiences.length ? profile.workExperiences.map((work, index) => (
                 <article className="experience-card" key={`work-${index}`}>
-                  <strong>{work.company}</strong><span>{work.title}</span><small>{work.startDate} — {work.endDate ?? "至今"}</small>
+                  <strong>{work.company}</strong><span>{work.title || "职位未提供"}</span><small>{work.startDate || "开始时间未知"} — {work.current ? "至今" : work.endDate || "结束时间未知"}</small>
+                  {work.description ? <details><summary>工作内容</summary><p style={{ whiteSpace: "pre-wrap" }}>{work.description}</p></details> : null}
                 </article>
               )) : <p className="empty-copy">暂无工作经历。</p>}
             </section>
@@ -63,10 +65,11 @@ export function EmployeeProfileDrawer({ employee, versionId, onClose }: {
               <h3><GraduationCap size={16} />教育经历 <span>{profile.educations.length}</span></h3>
               {profile.educations.length ? profile.educations.map((education, index) => (
                 <article className="experience-card" key={`education-${index}`}>
-                  <strong>{education.school}</strong><span>{education.major}</span><small>{education.startDate} — {education.endDate ?? "至今"}</small>
+                  <strong>{education.school}</strong><span>{education.major || "专业未提供"}{education.degree ? ` · ${education.degree}` : ""}</span><small>{education.startDate || "开始时间未知"} — {education.current ? "至今" : education.endDate || "结束时间未知"}</small>
                 </article>
               )) : <p className="empty-copy">暂无教育经历。</p>}
             </section>
+            {profile.sourceText ? <details><summary>查看导入原文</summary><pre className="resume-preview">{profile.sourceText}</pre></details> : null}
           </>}
         </div>
         <footer className="drawer-footer"><small>资料版本：{versionId}</small><button className="secondary-link" type="button" onClick={onClose}>关闭预览</button></footer>

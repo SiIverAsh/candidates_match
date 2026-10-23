@@ -5,6 +5,18 @@ import type {
   EmployeeDirectoryPage,
   EmployeeProfile,
 } from "../domain/models";
+import type { EmployeeResumeDraft } from "../domain/resume-import";
+
+export interface EmployeeResumeReader {
+  read(file: { name: string; type: string; size: number; arrayBuffer(): Promise<ArrayBuffer> }): Promise<
+    { kind: "parsed"; draft: EmployeeResumeDraft } | { kind: "rejected"; message: string }
+  >;
+}
+
+export interface EmployeeResumeRepository {
+  append(data: ParsedEmployeeData, actor: ImportActor): EmployeeDataVersionSummary;
+  recordFailedImport(actor: ImportActor, outcomeCode: ImportFailureCode, issueCount: number): void;
+}
 
 export interface ImportActor {
   id: string;
@@ -33,6 +45,7 @@ export interface ImportValidationResult {
   data: ParsedEmployeeData | null;
   issues: ImportValidationIssue[];
   totalIssueCount: number;
+  warnings?: string[];
 }
 
 export interface EmployeeWorkbookParser {

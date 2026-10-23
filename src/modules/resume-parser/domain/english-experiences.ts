@@ -17,7 +17,7 @@ export interface InferredEnglishEducation {
 }
 
 const ROLE = /\b(?:intern|engineer|developer|scientist|researcher|fellow|postdoc(?:tor(?:al)?)?|instructor|(?:exchange\s+)?research\s+student|analyst|manager|director|consultant|designer|architect|specialist|coordinator|officer|accountant|recruiter|lecturer|professor|assistant|associate|technician|founder|president|head|lead|executive|liaison|advis[eo]r|CEO|CTO|CFO|COO|CHRO|VP|SVP)\b/iu;
-const NARRATIVE = /^(?:\d{1,3}[.)、]\s*)?(?:responsible\b|responsibilities\b|achievements?\b|led\b|managed\b|developed\b|designed\b|built\b|implemented\b|supported\b|collaborated\b|conducted\b|worked\b|delivered\b|improved\b|achieved\b|published\b|awarded\b|propos(?:e|ed)\b|establish(?:ed)?\b|supervis(?:e|ed)\b|studied\b|invented\b|discovered\b|characteriz(?:ed|ation)\b|explored\b|focused\b|elucidated\b|investigated\b|identified\b|relevant coursework\b|courses?\b|gpa\b|grade\b|thesis\b|dissertation\b)/iu;
+const NARRATIVE = /^(?:\d{1,3}[.)、]\s*)?(?:responsible\b|responsibilities\b|achievements?\b|led\b|managed\b|developed\b|designed\b|built\b|implemented\b|supported\b|collaborated\b|conducted\b|worked\b|delivered\b|improved\b|achieved\b|published\b|awarded\b|propos(?:e|ed)\b|establish(?:ed)?\b|supervis(?:e|ed)\b|studied\b|invented\b|discovered\b|characteriz(?:ed|ation)\b|explored\b|focused\b|elucidated\b|investigated\b|identified\b|serve\s+as\b|lead\s+(?:global|cross|the|a|an|development|research projects?)\b|advance\b|authored?\b|chair\b|mentor\b|reviewed?\b|represent(?:ed)?\b|customized?\b|(?:as|in)\s+20\d{2}\b|relevant coursework\b|courses?\b|gpa\b|grade\b|thesis\b|dissertation\b)/iu;
 const FIELD = /^[\p{L}][\p{L} \t/]{0,30}[:：]/u;
 const DEGREE_PATTERN = String.raw`\b(?:bachelor(?:['’]s)?(?:\s+of\s+(?:science|arts|engineering|business administration|education|fine arts))?|master(?:['’]s)?(?:\s+of\s+(?:science|arts|engineering|business administration|philosophy|education|fine arts))?|doctor(?:ate)?(?:\s+of\s+(?:philosophy|medicine|education))?|[BM]\.?\s?Sc\.?|[BM]\.?[ASE]\.?|[BM]\.?Eng\.?|MBA|M\.?Phil\.?|Ph\.?D\.?|DPhil|MD|LL[BM]|associate(?:['’]s)?\s+(?:degree|of\s+(?:science|arts|applied science))|diploma)(?=$|[^A-Za-z])`;
 const DEGREE = new RegExp(DEGREE_PATTERN, "iu");
@@ -29,11 +29,15 @@ const EMPLOYMENT_TYPE = /^(?:full[ -]time|part[ -]time|contract|permanent|tempor
 const DURATION = /^\(?\d+\s*(?:years?|yrs?|months?|mos?)(?:\s+\d+\s*(?:months?|mos?))?\)?$/iu;
 
 export function hasEnglishEmploymentRole(value: string): boolean {
-  return ROLE.test(value) && !DEGREE.test(value) && !NARRATIVE.test(value);
+  return value.length <= 240 && ROLE.test(value) && !DEGREE.test(value) && !NARRATIVE.test(value);
 }
 
 export function hasEnglishDegree(value: string): boolean {
   return DEGREE.test(value);
+}
+
+export function educationDegree(value: string): string | null {
+  return value.match(DEGREE)?.[0] ?? value.match(/博士后|博士|硕士|本科|学士|大专|专科/u)?.[0] ?? null;
 }
 
 export function englishEducationMajor(value: string): string | null {
@@ -70,7 +74,7 @@ function organizationName(value: string): string {
 function workBlock(lines: string[], inWorkSection: boolean): Omit<InferredEnglishWork, "lineCount"> | null {
   // A degree-qualified fellowship can be a role when the author lists it as work.
   const isRole = (value: string) => hasEnglishEmploymentRole(value) ||
-    (inWorkSection && (ROLE.test(value) || /\bfellowship\b/iu.test(value)) && !NARRATIVE.test(value));
+    (inWorkSection && value.length <= 240 && (ROLE.test(value) || /\bfellowship\b/iu.test(value)) && !NARRATIVE.test(value));
   const text = lines.join("\n");
   const organizationDates = lines.filter(line => !isRole(line) && rangeIn(line));
   const dates = organizationDates.length === 1 ? rangeIn(organizationDates[0]) : rangeIn(text);
@@ -134,7 +138,7 @@ function educationBlock(lines: string[]): Omit<InferredEnglishEducation, "lineCo
   const dates = rangeIn(text);
   if (!dates && new RegExp(DATE_RANGE_PATTERN, "iu").test(text)) return null;
   // Commas before a degree or major divide fields; commas in campus names stay intact.
-  const parts = contentParts(text, dates).flatMap(part => part.split(/,\s*(?=(?:Bachelor|Master|Doctor|B\.?[AS]|M\.?[AS]|MBA|Ph\.?D|Computer|Software|Electrical|Mechanical|Civil|Chemical|Biomedical|Business|Economics|Finance|Law|Medicine|Biology|Chemistry|Physics|Mathematics|Psychology|History|English|Nursing|Education)\b)/iu)).map(cleanPart).filter(Boolean);
+  const parts = contentParts(text, dates).flatMap(part => part.split(/,\s*(?=(?:Bachelor|Master|Doctor|B\.?[AS]|M\.?[AS]|MBA|Ph\.?D|Computer|Software|Electrical|Mechanical|Civil|Chemical|Biomedical|Business|Economics|Finance|Law|Medicine|Biology|Chemistry|Physics|Mathematics|Psychology|History|English|Nursing|Education|Immunology|Oncology|Pharmacology|Microbiology|Biochemistry|Neurobiology|Biotechnology|Cancer\s+Biology|Analytical\s+Chemistry)\b)/iu)).map(cleanPart).filter(Boolean);
   const schools = parts.map(schoolPart);
   const schoolIndexes = schools.flatMap((school, index) => school ? [index] : []);
   if (schoolIndexes.length !== 1 || (!dates && !DEGREE.test(text))) return null;

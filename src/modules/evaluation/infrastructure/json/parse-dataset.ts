@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { EvaluationDataset } from "../../domain/models";
 import { RELATIONSHIP_SCENARIOS } from "../../domain/models";
+import { validEmployeeDate } from "../../../employee-data/domain/resume-import";
 
 const normalizedValueSchema = z.object({
   raw: z.string().nullable(),
@@ -20,11 +21,19 @@ const dateRangeSchema = z.object({
   current: z.boolean(),
 }).strict();
 
+const identitySchema = z.object({
+  employeeId: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  profileUrl: z.string().nullable().optional(),
+  resumeFingerprint: z.string().nullable().optional(),
+}).strict();
+
 const candidateProfileSchema = z.object({
   queryId: z.string().min(1),
   sourceType: z.enum(["FILE", "TEXT"]),
   sourceFormat: z.string().min(1),
   candidateName: z.string().nullable(),
+  identity: identitySchema.optional(),
   parseStatus: z.enum(["COMPLETE", "PARTIAL"]),
   completeness: z.object({
     hasName: z.boolean(),
@@ -39,6 +48,7 @@ const candidateProfileSchema = z.object({
     sequence: z.number().int().nonnegative(),
     company: normalizedValueSchema,
     rawTitle: z.string().nullable(),
+    description: z.string().optional(),
     normalizedFunction: normalizedValueSchema,
     dates: dateRangeSchema,
   }).strict()),
@@ -46,6 +56,7 @@ const candidateProfileSchema = z.object({
     sequence: z.number().int().nonnegative(),
     school: normalizedValueSchema,
     major: normalizedValueSchema,
+    degree: z.string().nullable().optional(),
     dates: dateRangeSchema,
   }).strict()),
   parserVersion: z.string().min(1),
@@ -54,25 +65,30 @@ const candidateProfileSchema = z.object({
   expiresAt: z.string().datetime(),
 }).strict();
 
+const employeeDateSchema = z.string().refine(value => validEmployeeDate(value, "2099-12-31"));
 const employeeSchema = z.object({
   employeeId: z.string().min(1),
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.union([z.string().email(), z.literal("")]),
+  profileUrl: z.string().nullable().optional(),
+  resumeFingerprint: z.string().nullable().optional(),
   currentDepartment: z.string(),
   currentTitle: z.string(),
   workExperiences: z.array(z.object({
     sequence: z.number().int().nonnegative(),
     company: z.string().min(1),
     title: z.string(),
-    startDate: z.string().date(),
-    endDate: z.string().date().nullable(),
+    startDate: employeeDateSchema,
+    endDate: employeeDateSchema.nullable(),
+    current: z.boolean().optional(),
   }).strict()),
   educations: z.array(z.object({
     sequence: z.number().int().nonnegative(),
     school: z.string().min(1),
     major: z.string(),
-    startDate: z.string().date(),
-    endDate: z.string().date().nullable(),
+    startDate: employeeDateSchema,
+    endDate: employeeDateSchema.nullable(),
+    current: z.boolean().optional(),
   }).strict()),
 }).strict();
 

@@ -607,6 +607,13 @@ a {
   padding: 1.25rem;
 }
 .file-drop:hover { border-color: var(--teal); }
+.file-drop.is-dragging, .file-drop:focus-within { border-color: var(--teal); background: var(--teal-soft); outline: 2px solid var(--teal); outline-offset: 2px; }
+.file-drop[aria-disabled="true"] { cursor: wait; opacity: 0.65; }
+.employee-resume-editor { display: grid; gap: 0.8rem; border: 1px solid var(--slate-300); border-radius: 0.8rem; padding: 1rem; min-width: 0; }
+.employee-import-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 0.8rem; }
+.employee-import-fields label { display: grid; gap: 0.35rem; min-width: 0; }
+.employee-import-fields input { width: 100%; min-width: 0; border: 1px solid var(--slate-300); border-radius: 0.4rem; padding: 0.6rem; background: var(--white); }
+.employee-import-experience { display: grid; gap: 0.6rem; border: 1px solid var(--slate-300); border-radius: 0.5rem; padding: 0.8rem; min-width: 0; }
 .file-drop span { color: var(--slate-700); font-size: 0.86rem; }
 .file-drop input { margin-top: 0.35rem; max-width: 100%; }
 .import-result { border-left: 4px solid var(--teal); margin-top: 1.5rem; padding: 1rem 0 0 1rem; }

@@ -11,6 +11,7 @@ import type {
   MatchingRepository,
 } from "../../application/ports";
 import type { MatchRun } from "../../domain/models";
+import { isCurrentMatchRun } from "../../domain/config";
 
 const globalForMatching = globalThis as unknown as { matchingDatabase?: DatabaseSync };
 
@@ -63,6 +64,8 @@ interface EmployeeRow {
   email: string;
   current_department: string;
   current_title: string;
+  profile_url: string | null;
+  resume_fingerprint: string | null;
 }
 
 interface WorkRow {
@@ -72,6 +75,7 @@ interface WorkRow {
   title: string;
   start_date: string;
   end_date: string | null;
+  current: number | null;
 }
 
 interface EducationRow {
@@ -81,6 +85,7 @@ interface EducationRow {
   major: string;
   start_date: string;
   end_date: string | null;
+  current: number | null;
 }
 
 export function findActiveEmployeeVersion(): string | null {
@@ -110,16 +115,19 @@ export function loadMatchingContext(
     return { queryId: row.query_id, submittedBy: row.submitted_by, submittedAt: row.submitted_at, expiresAt: row.expires_at, employeeVersionId: null, profile: JSON.parse(row.profile_json) as CandidateProfile, employees: [] };
   }
 
+  const employeeColumns = new Set((database.prepare("PRAGMA table_info(employees)").all() as { name: string }[]).map(column => column.name));
   const employeeRows = database.prepare(`
-    SELECT employee_id, name, email, current_department, current_title
+    SELECT employee_id, name, email, current_department, current_title,
+      ${employeeColumns.has("profile_url") ? "profile_url" : "NULL AS profile_url"},
+      ${employeeColumns.has("resume_fingerprint") ? "resume_fingerprint" : "NULL AS resume_fingerprint"}
     FROM employees WHERE version_id = ? ORDER BY employee_id
   `).all(row.employee_version_id) as unknown as EmployeeRow[];
   const workRows = database.prepare(`
-    SELECT id, employee_id, company, title, start_date, end_date
+    SELECT *
     FROM work_experiences WHERE version_id = ? ORDER BY employee_id, id
   `).all(row.employee_version_id) as unknown as WorkRow[];
   const educationRows = database.prepare(`
-    SELECT id, employee_id, school, major, start_date, end_date
+    SELECT *
     FROM education_experiences WHERE version_id = ? ORDER BY employee_id, id
   `).all(row.employee_version_id) as unknown as EducationRow[];
 
@@ -132,6 +140,7 @@ export function loadMatchingContext(
       title: work.title,
       startDate: work.start_date,
       endDate: work.end_date,
+      current: work.current == null ? work.end_date === null : Boolean(work.current),
     });
     workByEmployee.set(work.employee_id, list);
   }
@@ -144,6 +153,7 @@ export function loadMatchingContext(
       major: education.major,
       startDate: education.start_date,
       endDate: education.end_date,
+      current: education.current == null ? education.end_date === null : Boolean(education.current),
     });
     educationByEmployee.set(education.employee_id, list);
   }
@@ -151,6 +161,8 @@ export function loadMatchingContext(
     employeeId: employee.employee_id,
     name: employee.name,
     email: employee.email,
+    profileUrl: employee.profile_url,
+    resumeFingerprint: employee.resume_fingerprint || employee.employee_id.match(/^resume-([a-f0-9]{20})$/u)?.[1] || null,
     currentDepartment: employee.current_department,
     currentTitle: employee.current_title,
     workExperiences: workByEmployee.get(employee.employee_id) ?? [],
@@ -179,7 +191,7 @@ export function saveMatchRun(run: MatchRun, requestedBy: string): MatchRun {
 
     // The transaction also covers callers that raced past the application lookup.
     const existing = findMatchRun(run.queryId, requestedBy, run.createdAt);
-    if (existing) {
+    if (existing && isCurrentMatchRun(existing)) {
       database.exec("COMMIT");
       return existing;
     }
@@ -190,6 +202,13 @@ export function saveMatchRun(run: MatchRun, requestedBy: string): MatchRun {
         result_count, run_json, rule_version, threshold_version,
         normalizer_version, created_at, expires_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(query_id) DO UPDATE SET
+        id = excluded.id, submitted_by = excluded.submitted_by,
+        employee_version_id = excluded.employee_version_id, status = excluded.status,
+        result_count = excluded.result_count, run_json = excluded.run_json,
+        rule_version = excluded.rule_version, threshold_version = excluded.threshold_version,
+        normalizer_version = excluded.normalizer_version, created_at = excluded.created_at,
+        expires_at = excluded.expires_at
     `).run(
       run.id,
       run.queryId,

@@ -81,6 +81,23 @@ try {
   assert.equal(candidates.getQuery(templateItems[0].queryId!, actor.id)?.sourceType, "TEXT");
 
   publishEmployeeData(createBiopharmaEmployees(), actor);
+  const identityEmployees = createBiopharmaEmployees();
+  identityEmployees.employees[0].profileUrl = "https://www.linkedin.com/in/self-exclusion-test/";
+  publishEmployeeData(identityEmployees, actor);
+  const identityRows = await results(await upload(await fixture([
+    ["本人测试", "", "http://linkedin.com/in/Self-Exclusion-Test/?trk=test", work, education],
+    ["邮箱本人测试", identityEmployees.employees[0].email.toUpperCase(), "", work, education],
+  ], ["姓名", "邮箱", "LinkedIn Public URL", "工作经历", "教育经历"])));
+  for (const item of identityRows) {
+    const identityRun = matching.getRun(item.queryId!, actor.id)!;
+    assert.ok(identityRun.results.every(employee => employee.employeeId !== identityEmployees.employees[0].employeeId), "Excel 身份信息必须保存并用于排除本人");
+    assert.ok(identityRun.results.some(employee => employee.employeeId === identityEmployees.employees[1].employeeId), "排除本人不能移除真实共同经历同事");
+    assert.equal(identityRun.resultCount, item.employeeContacts?.length);
+    assert.equal(identityRun.results[0].rank, 1);
+  }
+  assert.equal(parser.getProfile(identityRows[0].queryId!, actor.id)?.identity?.profileUrl, "linkedin.com/in/self-exclusion-test");
+  assert.equal(parser.getProfile(identityRows[1].queryId!, actor.id)?.identity?.email, identityEmployees.employees[0].email);
+  publishEmployeeData(createBiopharmaEmployees(), actor);
   const shortRows = await results(await upload(await fixture([
     ["短字段", "明澈免疫生物医药有限公司", "免疫学研究员"],
     ["仅姓名", "", ""],

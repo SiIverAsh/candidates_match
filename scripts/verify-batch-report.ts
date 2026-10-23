@@ -8,6 +8,7 @@ const contacts: BatchEmployeeContact[] = ["LOW", "MEDIUM", "HIGH", "HIGH", "HIGH
   employeeId: `E${index}`, name: index === 0 ? '=HYPERLINK("https://example.com")' : `员工${index}`,
   email: `employee${index}@example.com`, currentDepartment: "肿瘤与免疫学研究部", currentTitle: "研究员",
   confidence: confidence as BatchEmployeeContact["confidence"], score: 50, rank: index + 1,
+  relationshipScore: 30, functionSimilarity: { status: "SAME_CATEGORY", bonus: 20, comparisons: [] },
 }));
 const statuses = ["MATCHED", "NO_RESULTS", "NEEDS_INPUT", "NEEDS_DATA", "FAILED", "IMPORTED"] as const;
 const items: BatchItemResult[] = statuses.map((status, index) => ({
@@ -22,7 +23,7 @@ const bytes = await batchReportApplication.export(report);
 assert.equal(JSON.stringify(report), before, "导出不得改变原始匹配结果与排序");
 const workbook = new ExcelJS.Workbook();
 await workbook.xlsx.load(bytes.buffer);
-assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["候选人匹配汇总", "员工明细"]);
+assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), ["候选人匹配汇总", "员工明细", "职能依据"]);
 const summary = workbook.getWorksheet("候选人匹配汇总")!;
 const details = workbook.getWorksheet("员工明细")!;
 assert.equal(summary.rowCount, 10);
@@ -39,6 +40,9 @@ assert.equal(summary.getCell("E8").value, "等待员工数据");
 assert.equal(summary.getCell("E9").value, "处理失败");
 assert.equal(summary.getCell("I9").value, "处理说明4");
 assert.equal(details.getCell("E5").value, "高置信度");
+assert.equal(details.getCell("K5").value, 30);
+assert.equal(details.getCell("L5").value, 20);
+assert.equal(details.getCell("M5").value, "存在大类相同的职位");
 assert.equal(details.getCell("E9").value, "中置信度");
 assert.equal(details.getCell("E10").value, "低置信度");
 assert.equal(details.getCell("F10").value, contacts[0].name);

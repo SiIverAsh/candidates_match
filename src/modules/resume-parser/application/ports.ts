@@ -1,4 +1,5 @@
 import type { CandidateProfile, ResumeSource } from "../domain/models";
+import type { PersonIdentity } from "../../../shared/domain/person-identity";
 import type { ResearchFunctionAssessment, ResearchWorkSource } from "../../research-functions/domain/models";
 
 export interface ResumeSourceRepository {
@@ -8,6 +9,7 @@ export interface ResumeSourceRepository {
   saveProfile(profile: CandidateProfile, requestedBy: string, reuseExisting?: boolean): CandidateProfile;
   findMissingFunctionQueryIds(now: string): string[];
   saveFunctionAssessment(queryId: string, assessment: ResearchFunctionAssessment, requestedBy: string, now: string): CandidateProfile | null;
+  saveIdentity(queryId: string, identity: PersonIdentity, requestedBy: string, now: string): CandidateProfile | null;
 }
 
 export type TextExtractionResult =

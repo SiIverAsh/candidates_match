@@ -8,6 +8,7 @@ const ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const COLORS = { HIGH: "E2F0D9", MEDIUM: "FFF2CC", LOW: "DDEBF7" };
 const FUNCTION_STATUS = { CLASSIFIED: "已有优先职能", AMBIGUOUS: "方向接近，待复核", INSUFFICIENT: "证据不足" } as const;
 const EVIDENCE_KIND = { STRONG: "强关键词", SUPPORTING: "辅助关键词", TITLE: "职位关键词", NEGATIVE: "排除关键词" } as const;
+const SIMILARITY = { SAME_CATEGORY: "存在大类相同的职位", DIFFERENT_CATEGORY: "已识别的职位大类不同", UNKNOWN: "信息不足" } as const;
 
 function sheet(workbook: ExcelJS.Workbook, name: string, headers: string[], widths: number[], note: string) {
   const result = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 4, xSplit: 4 }] });
@@ -68,9 +69,9 @@ export const batchReportWriter: BatchReportWriter = {
     let detailNumber = 1;
     function createDetails() {
       return sheet(workbook, detailNumber === 1 ? "员工明细" : `员工明细${detailNumber}`,
-        ["批内序号", "来源工作表 / 简历文件", "原始行号", "候选人姓名", "置信度", "内部员工姓名", "联系邮箱", "部门", "职位", "匹配分数"],
-        [10, 20, 12, 20, 16, 20, 38, 28, 30, 12],
-        "每行是一位候选人与一位内部员工的匹配关系，保留全部匹配员工；同名候选人请按来源工作表或简历文件、原始行号及批内序号区分。");
+        ["批内序号", "来源工作表 / 简历文件", "原始行号", "候选人姓名", "关系置信度", "内部员工姓名", "联系邮箱", "部门", "职位", "匹配总分", "经历证据分", "职能辅助加分", "职能相似度", "职能比较依据"],
+        [10, 20, 12, 20, 16, 20, 38, 28, 30, 12, 14, 14, 30, 80],
+        "每行是一位候选人与一位内部员工的匹配关系，保留全部匹配员工；经历证据与职能辅助加分分别列出，总分上限 100 分。部门仅供展示，不参与匹配。");
     }
     let details = createDetails();
     let functionSheetNumber = 1;
@@ -106,7 +107,10 @@ export const batchReportWriter: BatchReportWriter = {
       }
       for (const employee of contacts) {
         if (details.rowCount === 1_048_576) { detailNumber++; details = createDetails(); }
-        const row = addRow(details, [...identity, CONFIDENCE[employee.confidence], employee.name, employee.email || "未提供邮箱", employee.currentDepartment, employee.currentTitle, employee.score], 36);
+        const similarity = employee.functionSimilarity;
+        const comparisonText = similarity?.comparisons.map(item => `${item.company}：${item.candidateTitle ?? "职位缺失"}（${item.candidateFunction ?? "未识别"}） / ${item.employeeTitle}（${item.employeeFunction ?? "未识别"}）；${item.reason} +${item.bonus} 分`).join("\n") ?? "";
+        const row = addRow(details, [...identity, CONFIDENCE[employee.confidence], employee.name, employee.email || "未提供邮箱", employee.currentDepartment, employee.currentTitle, employee.score,
+          employee.relationshipScore ?? "", similarity?.bonus ?? "", similarity ? SIMILARITY[similarity.status] : "未计算", comparisonText.slice(0, 32000)], 36);
         row.getCell(5).fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS[employee.confidence] } };
       }
     }

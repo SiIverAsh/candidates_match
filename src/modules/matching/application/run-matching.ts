@@ -1,4 +1,5 @@
 import type { MatchRun } from "../domain/models";
+import { isCurrentMatchRun } from "../domain/config";
 import type { MatchingDependencies } from "./ports";
 
 export type RunMatchingResult =
@@ -14,7 +15,7 @@ export function runMatching(
 ): RunMatchingResult {
   const createdAt = dependencies.now().toISOString();
   const existing = dependencies.repository.findRun(queryId, requestedBy, createdAt);
-  if (existing) return { kind: "matched", run: existing, reused: true };
+  if (existing && isCurrentMatchRun(existing)) return { kind: "matched", run: existing, reused: true };
 
   const employeeVersionId = dependencies.repository.findActiveEmployeeVersion();
   const context = dependencies.repository.loadContext(queryId, requestedBy, createdAt, employeeVersionId);
@@ -43,11 +44,16 @@ export function runMatching(
 export function getMatchRun(
   queryId: string,
   requestedBy: string,
-  dependencies: Pick<MatchingDependencies, "repository" | "now">,
+  dependencies: MatchingDependencies,
 ): MatchRun | null {
-  return dependencies.repository.findRun(
+  const existing = dependencies.repository.findRun(
     queryId,
     requestedBy,
     dependencies.now().toISOString(),
   );
+  if (!existing || isCurrentMatchRun(existing)) return existing;
+  const result = runMatching(queryId, requestedBy, dependencies);
+  if (result.kind === "matched") return result.run;
+  if (result.kind === "not_found") return null;
+  throw new Error(result.message);
 }

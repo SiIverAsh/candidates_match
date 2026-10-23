@@ -34,7 +34,7 @@ export type ImportEmployeeWorkbookResult =
       issues: ImportValidationIssue[];
       totalIssueCount: number;
     }
-  | { kind: "published"; version: EmployeeDataVersionSummary }
+  | { kind: "published"; version: EmployeeDataVersionSummary; warnings?: string[] }
   | { kind: "publish_failed"; issue: ImportValidationIssue };
 
 function fileIssue(code: string, message: string): ImportValidationIssue {
@@ -80,7 +80,7 @@ export async function importEmployeeWorkbook(
 
   try {
     const version = repository.publishEmployeeData(validation.data, actor);
-    return { kind: "published", version };
+    return { kind: "published", version, warnings: validation.warnings };
   } catch {
     repository.recordFailedImport(actor, "PUBLISH_FAILED", 1);
     return {

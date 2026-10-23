@@ -1,5 +1,6 @@
 import ExcelJS, { type Cell, type Worksheet } from "exceljs";
-import JSZip from "jszip";
+import { readWorkbook } from "../../../../shared/infrastructure/excel/read-workbook";
+import { parseFlatEmployeeWorkbook } from "./parse-flat-workbook";
 
 import {
   EMPLOYEE_IMPORT_SCHEMA,
@@ -179,23 +180,6 @@ function validateHeaders(
   return valid;
 }
 
-async function normalizeNamespacedWorkbook(bytes: ArrayBuffer): Promise<Buffer> {
-  const source = Buffer.from(bytes);
-  const archive = await JSZip.loadAsync(source);
-  const workbookEntry = archive.file("xl/workbook.xml");
-  const workbookXml = workbookEntry ? await workbookEntry.async("string") : "";
-  if (!workbookXml.includes("<x:workbook")) return source;
-
-  const xmlFiles = Object.values(archive.files).filter(
-    (entry) => !entry.dir && entry.name.endsWith(".xml"),
-  );
-  await Promise.all(xmlFiles.map(async (entry) => {
-    const xml = await entry.async("string");
-    archive.file(entry.name, xml.replaceAll(/<(\/?)x:/gu, "<$1"));
-  }));
-  return archive.generateAsync({ type: "nodebuffer" });
-}
-
 function parseEmployees(
   sheet: Worksheet,
   collector: IssueCollector,
@@ -317,31 +301,21 @@ function parseEducation(
 
 export async function parseEmployeeWorkbook(bytes: ArrayBuffer): Promise<ImportValidationResult> {
   const collector: IssueCollector = { issues: [], total: 0 };
-  const signature = new Uint8Array(bytes.slice(0, 2));
-  if (signature[0] !== 0x50 || signature[1] !== 0x4b) {
-    addIssue(collector, {
-      sheet: "文件", row: 0, field: "file", code: "INVALID_XLSX",
-      message: "文件不是有效的 XLSX 工作簿。",
-    });
-    return { data: null, issues: collector.issues, totalIssueCount: collector.total };
-  }
-
-  const workbook = new ExcelJS.Workbook();
+  let workbook: ExcelJS.Workbook;
   try {
-    const normalized = await normalizeNamespacedWorkbook(bytes);
-    await workbook.xlsx.load(
-      normalized as unknown as Parameters<typeof workbook.xlsx.load>[0],
-    );
-  } catch {
+    workbook = await readWorkbook(bytes);
+  } catch (error) {
     if (process.env.DEBUG_EMPLOYEE_IMPORT === "1") {
       console.error("Employee workbook parsing failed.", { code: "CORRUPTED_XLSX" });
     }
     addIssue(collector, {
       sheet: "文件", row: 0, field: "file", code: "CORRUPTED_XLSX",
-      message: "工作簿无法解析，请使用下载模板重新保存。",
+      message: error instanceof Error ? error.message : "工作簿无法解析，请用 Excel／WPS 重新另存为 .xlsx。",
     });
     return { data: null, issues: collector.issues, totalIssueCount: collector.total };
   }
+
+  if (!EMPLOYEE_IMPORT_SHEET_NAMES.some(name => workbook.getWorksheet(name)?.getCell(1, 1).text === "employee_id")) return parseFlatEmployeeWorkbook(workbook);
 
   for (const worksheet of workbook.worksheets) {
     if (!EMPLOYEE_IMPORT_SHEET_NAMES.includes(worksheet.name as EmployeeImportSheetName)) {

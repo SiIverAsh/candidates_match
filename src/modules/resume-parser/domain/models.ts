@@ -1,4 +1,5 @@
 import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
+import type { PersonIdentity } from "../../../shared/domain/person-identity";
 
 export type ParseStatus = "COMPLETE" | "PARTIAL" | "INSUFFICIENT" | "FAILED";
 export type DatePrecision = "DAY" | "MONTH" | "YEAR" | "UNKNOWN";
@@ -34,6 +35,7 @@ export interface CandidateEducationExperience {
   sequence: number;
   school: NormalizedValue;
   major: NormalizedValue;
+  degree?: string | null;
   dates: ExperienceDateRange;
 }
 
@@ -51,6 +53,7 @@ export interface CandidateProfile {
   sourceType: "FILE" | "TEXT";
   sourceFormat: string;
   candidateName: string | null;
+  identity?: PersonIdentity;
   parseStatus: ParseStatus;
   completeness: CandidateCompleteness;
   warnings: string[];

@@ -30,6 +30,26 @@ export interface MatchEvidence {
   reason: string;
 }
 
+export interface WorkFunctionComparison {
+  company: string;
+  candidateTitle: string | null;
+  employeeTitle: string;
+  candidateFunction: string | null;
+  employeeFunction: string | null;
+  status: "SAME_CATEGORY" | "DIFFERENT_CATEGORY" | "UNKNOWN";
+  overlap: EvidenceOverlap | null;
+  bonus: number;
+  reason: string;
+  candidateSourceFields: string[];
+  employeeSourceFields: string[];
+}
+
+export interface FunctionSimilarity {
+  status: WorkFunctionComparison["status"];
+  bonus: number;
+  comparisons: WorkFunctionComparison[];
+}
+
 export interface EmployeeMatchResult {
   employeeId: string;
   name: string;
@@ -38,6 +58,9 @@ export interface EmployeeMatchResult {
   currentTitle: string;
   rank: number;
   score: number;
+  // Optional for persisted results produced before matching-rules-v2.
+  relationshipScore?: number;
+  functionSimilarity?: FunctionSimilarity;
   confidence: MatchConfidence;
   evidence: MatchEvidence[];
 }

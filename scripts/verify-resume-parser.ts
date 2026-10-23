@@ -61,6 +61,8 @@ assert.equal(parseDateRange("20\n20 .09 — 20\n24 .06").start, null);
 assert.equal(parseDateRange("12020 — 12024").start, null);
 assert.equal(normalizeCompany("微软有限公司").value, "Microsoft");
 assert.equal(normalizeCompany("示例科技有限公司").value, "示例科技");
+assert.equal(normalizeCompany("AbbVie · 全职").value, "AbbVie");
+assert.equal(normalizeCompany("AbbVie · Full-time").value, "AbbVie");
 assert.equal(normalizeSchool("Peking University").value, "北京大学");
 assert.deepEqual(normalizeFunction("产品数据经理").alternatives, ["产品", "工程与技术"]);
 assert.equal(normalizeFunction("产品数据经理").confidence, "LOW");
@@ -83,6 +85,26 @@ assert.equal(complete.candidateName, "王小明");
 assert.equal(complete.workExperiences[0]?.company.value, "Microsoft");
 assert.equal(complete.educations[0]?.school.value, "北京大学");
 assert.equal(complete.educations[0]?.dates.startPrecision, "YEAR");
+const identityText = `Name: Identity Person\nE-mail: PERSON@example.com\nLinkedIn: https://www.linkedin.com/in/Identity-Person/?trk=test\n员工编号：E-IDENTITY\n${completeResume}`;
+const identified = parseResumeText(textSource(identityText), identityText, parsedAt);
+assert.deepEqual({ ...identified.identity, resumeFingerprint: undefined }, { email: "person@example.com", profileUrl: "linkedin.com/in/identity-person", employeeId: "E-IDENTITY", resumeFingerprint: undefined });
+assert.equal(identified.identity?.resumeFingerprint?.length, 20);
+
+for (const [school, major] of [["Harvard University", "Cancer Biology"], ["Stanford University", "Immunology"], ["Tsinghua University", "Analytical Chemistry"], ["Nanyang Technological University", "Pharmacology"]]) {
+  const text = `Education\n2019.09 - 2023.06, ${school}, ${major}`;
+  const parsed = parseResumeText(textSource(text), text, parsedAt);
+  assert.equal(parsed.educations[0].school.raw, school, "逗号后的生命科学专业不能并入学校名");
+  assert.equal(parsed.educations[0].major.raw, major);
+}
+
+for (const name of ["丁鑫芳", "Jingyu Li (李靖宇)", "Jianxuan (Jax) Wu, Ph.D."]) {
+  const text = `${name}\nname@example.com\n教育经历\n学校：示例大学\n学位：Doctor of Philosophy - PhD\n专业：Immunology\n时间：2017-2021`;
+  const parsed = parseResumeText(textSource(text), text, parsedAt);
+  assert.equal(parsed.candidateName, name.replace(/, Ph.D.$/u, ""));
+  assert.equal(parsed.educations[0].degree, "Doctor of Philosophy - PhD");
+  assert.equal(parsed.educations[0].major.raw, "Immunology");
+  assert.equal(parsed.workExperiences.length, 0, "不能为只有教育经历的简历编造工作经历");
+}
 
 for (const numbers of [["1.", "2.", "3."], ["1、", "2、", "3、"], ["（1）", "（2）", "（3）"]]) {
   const numberedResume = [

@@ -70,7 +70,7 @@ export default function App() {
   function renderAuthenticatedPage(user: AuthenticatedUser) {
     if (path === "/candidates/import") {
       return hasPermission(user, "candidate:query")
-        ? <CandidateIntakePage user={user} onLogout={logout} initialMode="batch" />
+        ? <CandidateIntakePage user={user} onLogout={logout} />
         : <ForbiddenPage />;
     }
     if (path === "/admin/employee-data") {

@@ -24,7 +24,7 @@ function matchItem(item: BatchItemResult, actorId: string, dependencies: BatchDe
   if (result.kind !== "matched") return { ...item, status: result.kind === "no_employee_version" ? "NEEDS_DATA" : "FAILED", message: result.message };
   item = { ...item, candidateFunctions: result.run.candidateFunctions ?? item.candidateFunctions };
   if (result.run.status === "SKIPPED_INSUFFICIENT") return { ...item, status: "NEEDS_INPUT", message: "经历信息不足，请补充简历后重试。" };
-  item = { ...item, employeeContacts: result.run.results.map(({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank }) => ({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank })) };
+  item = { ...item, employeeContacts: result.run.results.map(({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank, relationshipScore, functionSimilarity }) => ({ employeeId, name, email, currentDepartment, currentTitle, confidence, score, rank, relationshipScore, functionSimilarity })) };
   const message = result.run.resultCount ? `找到 ${result.run.resultCount} 位可能认识的内部同事` : "已完成匹配，未找到有共同经历的内部同事。";
   return { ...item, status: result.run.resultCount ? "MATCHED" : "NO_RESULTS", resultCount: result.run.resultCount, message: result.reused ? `已复用已有匹配结果，未重复写入。${message}` : message };
 }

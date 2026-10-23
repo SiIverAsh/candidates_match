@@ -77,8 +77,8 @@ export function EmployeeDataPage({
           <div className="workspace-heading admin-heading">
             <div>
               <p className="eyebrow">员工数据导入与版本</p>
-              <h1>员工批量导入与管理</h1>
-              <p>使用一份标准 Excel 批量导入多位员工及其工作、教育经历。</p>
+              <h1>员工导入与管理</h1>
+              <p>拖入简历导入一位员工，或使用中文 Excel 名单批量导入；自动识别姓名、工作和教育经历。</p>
             </div>
             <span className="status-chip">服务端鉴权</span>
           </div>
@@ -130,13 +130,14 @@ export function EmployeeDataPage({
             ) : <p className="empty-copy">暂无导入记录。</p>}
           </section>
           <section className="schema-panel" aria-labelledby="schema-title">
-            <div><p className="eyebrow">模板结构</p><h2 id="schema-title">三张工作表，表头不可修改</h2></div>
+            <div><p className="eyebrow">Excel 导入格式</p><h2 id="schema-title">支持中文员工名单，也兼容三表模板</h2></div>
+            <p>中文名单在前 20 行提供“姓名”和“完整工作经历”“完整教育经历”“简历全文”等列，支持当前公司、当前职位、邮箱、领英链接和多段经历分列。总表与分表按人员来源去重；缺失邮箱、部门或日期保留为空。</p>
             <div className="schema-grid">
               <article><strong>Employees</strong><code>employee_id · name · email · current_department · current_title</code></article>
               <article><strong>WorkExperience</strong><code>employee_id · company · title · start_date · end_date</code></article>
               <article><strong>Education</strong><code>employee_id · school · major · start_date · end_date</code></article>
             </div>
-            <p className="schema-note">每位员工至少一条工作经历和一条教育经历；日期使用 Excel 日期或 YYYY-MM-DD，当前经历的 end_date 可留空。</p>
+            <p className="schema-note">上方为可选的原三表模板，继续沿用严格校验。中文名单和单份简历至少有一条可识别的工作或教育经历；日期保留原有年份、月份或日精度，未知结束时间不视为至今。</p>
           </section>
         </div>
       </div>

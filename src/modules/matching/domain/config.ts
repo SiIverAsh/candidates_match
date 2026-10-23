@@ -1,11 +1,11 @@
 export const MATCHING_CONFIG = {
-  ruleVersion: "matching-rules-v1",
+  ruleVersion: "matching-rules-v4",
   thresholdVersion: "confidence-v1",
   weights: {
     educationSchoolMajorOverlap: 70,
     educationSchoolOverlap: 35,
     educationSameSchool: 15,
-    workCompanyFunctionOverlap: 45,
+    workFunctionSimilarityBonus: 20,
     workCompanyOverlap: 25,
     workSameCompany: 10,
   },
@@ -15,3 +15,7 @@ export const MATCHING_CONFIG = {
     low: 10,
   },
 } as const;
+
+export function isCurrentMatchRun(run: { ruleVersion: string; thresholdVersion: string }): boolean {
+  return run.ruleVersion === MATCHING_CONFIG.ruleVersion && run.thresholdVersion === MATCHING_CONFIG.thresholdVersion;
+}

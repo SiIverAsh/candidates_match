@@ -1,4 +1,5 @@
 import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
+import type { FunctionSimilarity } from "../../matching/domain/models";
 
 export const BATCH_LIMITS = { maxFiles: 50, maxTotalBytes: 25 * 1024 * 1024, maxQueryIds: 200 } as const;
 
@@ -11,6 +12,8 @@ export interface BatchEmployeeContact {
   currentTitle: string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   score: number;
+  relationshipScore?: number;
+  functionSimilarity?: FunctionSimilarity;
   rank: number;
 }
 export interface BatchItemResult {

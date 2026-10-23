@@ -97,6 +97,38 @@ assert.equal(finalOverview.activeVersion?.id, firstVersion.id);
 assert.equal(finalOverview.recentAttempts[0]?.status, "FAILED");
 assert.equal(finalOverview.recentAttempts[1]?.versionId, firstVersion.id);
 
+const flat = new ExcelJS.Workbook();
+const headers = ["姓名", "当前职位", "当前公司", "LinkedIn Public URL", "完整工作经历", "完整教育经历"];
+const flatRow = ["合成人员", "Scientist", "示例药企", "https://www.linkedin.com/in/synthetic-employee", "职业档案中列出的工作经历 | Scientist at 示例药企 · 2020年 - 现在 | Research Assistant at Example University · 2017年 - 2019年", "职业档案中列出的教育经历 | Example University，Doctor of Philosophy (Ph.D.) · 2012年 - 2017年 | 示例大学，学士 | 档案分析行 | 最新动态"];
+flat.addWorksheet("总表").addRows([headers, flatRow]);
+flat.addWorksheet("公司分表").addRows([headers, flatRow]);
+const flatResult = await parseEmployeeWorkbook(toArrayBuffer(await flat.xlsx.writeBuffer() as unknown as Uint8Array));
+assert.equal(flatResult.totalIssueCount, 0, JSON.stringify(flatResult.issues));
+assert.equal(flatResult.data?.employees.length, 1, "总表和分表按来源去重");
+assert.equal(flatResult.data?.employees[0].email, "", "不得编造邮箱");
+assert.equal(flatResult.data?.employees[0].currentDepartment, "");
+assert.ok(flatResult.data?.employees[0].employeeId.startsWith("record-"));
+assert.equal(flatResult.data?.workExperiences.length, 2);
+assert.equal(flatResult.data?.workExperiences[0].startDate, "2020", "保留年份精度");
+assert.equal(flatResult.data?.workExperiences[0].current, true);
+assert.equal(flatResult.data?.educationExperiences.length, 2);
+assert.equal(flatResult.data?.educationExperiences[0].degree, "Doctor of Philosophy (Ph.D.)");
+assert.equal(flatResult.data?.educationExperiences[1].current, false, "未知日期不视为当前");
+assert.equal(flatResult.data?.educationExperiences[1].startDate, "");
+assert.match(flatResult.warnings?.[0] ?? "", /合并 1 条/);
+const flatVersion = repository.publishEmployeeData(flatResult.data!, actor);
+const savedProfile = repository.findEmployeeProfile(flatResult.data!.employees[0].employeeId, flatVersion.id)!;
+assert.equal(savedProfile.workExperiences[0].startDate, "2020");
+assert.equal(savedProfile.educations.find(item => item.school === "示例大学")?.current, false);
+assert.match(savedProfile.sourceText ?? "", /完整工作经历/);
+
+const appended = repository.appendEmployeeData({
+  employees: [{ employeeId: "no-email-student", name: "教育经历测试", email: "", currentDepartment: "", currentTitle: "" }],
+  workExperiences: [], educationExperiences: [{ employeeId: "no-email-student", school: "另一大学", major: "", degree: "本科", startDate: "2018", endDate: null, current: false }],
+}, actor);
+assert.equal(appended.employeeCount, 2, "不同人员的空邮箱不能导致重复冲突，追加也不能覆盖已有员工");
+assert.ok(repository.findEmployeeProfile(flatResult.data!.employees[0].employeeId, appended.id)?.sourceText);
+
 console.log(JSON.stringify({
   validTemplate: true,
   duplicateRejected: true,

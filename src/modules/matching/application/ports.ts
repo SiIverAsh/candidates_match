@@ -7,6 +7,7 @@ export interface EmployeeWorkSnapshot {
   title: string;
   startDate: string;
   endDate: string | null;
+  current?: boolean;
 }
 
 export interface EmployeeEducationSnapshot {
@@ -15,12 +16,15 @@ export interface EmployeeEducationSnapshot {
   major: string;
   startDate: string;
   endDate: string | null;
+  current?: boolean;
 }
 
 export interface EmployeeSnapshot {
   employeeId: string;
   name: string;
   email: string;
+  profileUrl?: string | null;
+  resumeFingerprint?: string | null;
   currentDepartment: string;
   currentTitle: string;
   workExperiences: EmployeeWorkSnapshot[];

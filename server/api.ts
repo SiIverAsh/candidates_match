@@ -17,6 +17,7 @@ import { matchingApplication } from "../src/modules/matching/composition";
 import { resumeParserApplication } from "../src/modules/resume-parser/composition";
 import type { ImportEmployeeWorkbookResult } from "../src/modules/employee-data/application/import-employee-workbook";
 import type { ImportActionState } from "../src/modules/employee-data/presentation/contracts";
+import { employeeResumeDraftSchema } from "../src/modules/employee-data/presentation/contracts";
 import { enterpriseAiApplication } from "../src/modules/enterprise-ai/composition";
 import { chatRequestSchema } from "../src/modules/enterprise-ai/presentation/contracts";
 import { AiError } from "../src/modules/enterprise-ai/domain/models";
@@ -93,6 +94,7 @@ function importState(result: ImportEmployeeWorkbookResult): ImportActionState {
       issues: [],
       totalIssueCount: 0,
       version: result.version,
+      warnings: result.warnings,
     };
   }
   if (result.kind === "validation_failed") {
@@ -527,6 +529,36 @@ export async function handleApi(
         ? { name: file.name, size: file.size, arrayBuffer: () => file.arrayBuffer() }
         : null,
     });
+    sendJson(response, 200, importState(result));
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/employee-data/resume-preview") {
+    const body = await readBody(request, 6 * 1024 * 1024);
+    const form = await new Request(url, { method: "POST", headers: requestHeaders(request), body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer }).formData();
+    const file = form.get("employeeFile");
+    if (!(file instanceof File)) {
+      sendJson(response, 400, { error: "请选择一份员工简历。" });
+      return true;
+    }
+    sendJson(response, 200, await employeeDataApplication.previewResume(file));
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/employee-data/resume") {
+    let json: unknown;
+    try { json = JSON.parse((await readBody(request, 2 * 1024 * 1024)).toString("utf8")); }
+    catch (error) {
+      if (error instanceof RequestBodyError) throw error;
+      sendJson(response, 400, { error: "员工资料格式无效。" });
+      return true;
+    }
+    const parsed = employeeResumeDraftSchema.safeParse(json);
+    if (!parsed.success) {
+      sendJson(response, 400, { error: "员工资料字段或经历格式无效。" });
+      return true;
+    }
+    const result = employeeDataApplication.importResume(parsed.data, { id: user.id, displayName: user.displayName });
     sendJson(response, 200, importState(result));
     return true;
   }

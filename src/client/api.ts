@@ -6,6 +6,7 @@ import type { CandidateMatchCategory, CandidateQueryPage } from "@/modules/candi
 import type { CandidateColumnFilters } from "@/modules/candidate-intake/domain/column-filters";
 import type { EmployeeDataOverview } from "@/modules/employee-data/domain/models";
 import type { EmployeeDirectoryPage, EmployeeProfile } from "@/modules/employee-data/domain/models";
+import type { EmployeeResumeDraft } from "@/modules/employee-data/domain/resume-import";
 import type { ImportActionState } from "@/modules/employee-data/presentation/contracts";
 import type { RunMatchingResult } from "@/modules/matching/application/run-matching";
 import type { MatchRun } from "@/modules/matching/domain/models";
@@ -127,6 +128,16 @@ export const api = {
       method: "POST",
       body: form,
     });
+  },
+
+  previewEmployeeResume(file: File): Promise<{ kind: "parsed"; draft: EmployeeResumeDraft } | { kind: "rejected"; message: string }> {
+    const form = new FormData();
+    form.set("employeeFile", file);
+    return request("/api/admin/employee-data/resume-preview", { method: "POST", body: form });
+  },
+
+  importEmployeeResume(draft: EmployeeResumeDraft): Promise<ImportActionState> {
+    return request("/api/admin/employee-data/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
   },
 
   candidateReadiness(): Promise<CandidateReadiness> {

@@ -1,6 +1,6 @@
 import type { NormalizedValue } from "./models";
 
-export const NORMALIZER_VERSION = "entity-rules-v1";
+export const NORMALIZER_VERSION = "entity-rules-v2";
 
 const COMPANY_ALIASES: Record<string, string> = {
   ibm: "IBM",
@@ -64,7 +64,7 @@ function unresolved(raw: string | null): NormalizedValue {
 export function normalizeCompany(raw: string | null): NormalizedValue {
   if (!raw) return unresolved(raw);
   const source = cleaned(raw);
-  const withoutSuffix = source
+  const withoutSuffix = source.replace(/\s*·\s*(?:全职|兼职|实习|合同|full[ -]time|part[ -]time|contract|internship).*$/iu, "")
     .replace(/(?:有限责任公司|股份有限公司|有限公司)$/u, "")
     .replace(/\b(?:incorporated|inc|limited|ltd|llc|corp(?:oration)?|company|co)\.?$/iu, "")
     .trim();
