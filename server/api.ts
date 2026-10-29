@@ -27,6 +27,7 @@ import { batchMatchSchema } from "../src/modules/candidate-batch/presentation/co
 import { BATCH_LIMITS, BatchInputError } from "../src/modules/candidate-batch/domain/models";
 import type { BatchCommand } from "../src/modules/candidate-batch/application/process-batch";
 import { CANDIDATE_WORKBOOK_LIMITS } from "../src/modules/candidate-batch/domain/workbook";
+import { MAX_RESUME_FILE_BYTES } from "../src/shared/domain/import-file";
 import { candidateColumnFiltersSchema } from "../src/modules/candidate-intake/presentation/contracts";
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -372,7 +373,7 @@ export async function handleApi(
       sendJson(response, 403, { error: "FORBIDDEN" });
       return true;
     }
-    const body = await readBody(request);
+    const body = await readBody(request, MAX_RESUME_FILE_BYTES + 1024 * 1024);
     const requestBody = body.buffer.slice(
       body.byteOffset,
       body.byteOffset + body.byteLength,
@@ -561,7 +562,7 @@ export async function handleApi(
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/employee-data/resume-preview") {
-    const body = await readBody(request, 6 * 1024 * 1024);
+    const body = await readBody(request, MAX_RESUME_FILE_BYTES + 1024 * 1024);
     const form = await new Request(url, { method: "POST", headers: requestHeaders(request), body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer }).formData();
     const file = form.get("employeeFile");
     if (!(file instanceof File)) {

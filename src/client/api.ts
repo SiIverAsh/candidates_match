@@ -144,8 +144,20 @@ export const api = {
     return request("/api/admin/employee-data/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
   },
 
-  importEmployeeResumes(drafts: EmployeeResumeDraft[]): Promise<ImportActionState> {
-    return request("/api/admin/employee-data/resumes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(drafts) });
+  async importEmployeeResumes(drafts: EmployeeResumeDraft[]): Promise<ImportActionState> {
+    try {
+      return await request("/api/admin/employee-data/resumes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(drafts) });
+    } catch (error) {
+      // These responses are emitted before publishing starts. Convert them to
+      // per-batch validation failures so the importer can isolate a bad file.
+      // Network errors, authentication failures and server errors remain fatal:
+      // the client cannot know whether the batch was committed.
+      if (error instanceof ApiError && (error.status === 400 || error.status === 413)) {
+        const message = error.status === 413 ? "简历资料过大，请核对该文件。" : "员工资料字段或经历格式无效，请核对该文件。";
+        return { status: "error", message, issues: [{ sheet: "简历", row: 0, field: "资料", code: "INVALID_REQUEST", message }], totalIssueCount: 1, version: null };
+      }
+      throw error;
+    }
   },
 
   candidateReadiness(): Promise<CandidateReadiness> {

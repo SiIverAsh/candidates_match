@@ -67,6 +67,28 @@ assert.equal(normalizeSchool("Peking University").value, "北京大学");
 assert.deepEqual(normalizeFunction("产品数据经理").alternatives, ["产品", "工程与技术"]);
 assert.equal(normalizeFunction("产品数据经理").confidence, "LOW");
 
+const compatibilityResume = [
+  "张⼩明", "⼯作经历",
+  "2019.03 ⾄ 今   Example Institute / Researcher@Research Group",
+  "Completed a research project.", "教育背景", "1", "",
+  "2018.09 ⾄ 今   示例⼤学 / 硕⼠@⽣物化学",
+  "2014.09 ⾄ 2018.06   另一⼤学 / 本科@⽣物⼯程",
+].join("\n");
+const compatibilityProfile = parseResumeText(textSource(compatibilityResume), compatibilityResume, parsedAt);
+assert.equal(compatibilityProfile.candidateName, "张小明");
+assert.equal(compatibilityProfile.workExperiences.length, 1);
+assert.equal(compatibilityProfile.workExperiences[0].company.raw, "Example Institute");
+assert.equal(compatibilityProfile.workExperiences[0].rawTitle, "Researcher@Research Group");
+assert.equal(compatibilityProfile.workExperiences[0].dates.start, "2019-03");
+assert.equal(compatibilityProfile.workExperiences[0].dates.current, true);
+assert.equal(compatibilityProfile.educations.length, 2);
+assert.equal(compatibilityProfile.educations[0].school.raw, "示例大学");
+assert.equal(compatibilityProfile.educations[0].degree, "硕士");
+assert.equal(compatibilityProfile.educations[0].major.raw, "生物化学");
+assert.equal(compatibilityProfile.educations[0].dates.current, true);
+assert.equal(compatibilityProfile.educations[1].dates.end, "2018-06");
+assert.equal(parseDateRange("2019 - 今").current, true);
+
 const completeResume = [
   "姓名：王小明",
   "工作经历",
@@ -179,7 +201,7 @@ const internships = parseResumeText(textSource(labelledInternship), labelledInte
 assert.equal(internships.educations.length, 1);
 assert.deepEqual(internships.workExperiences.map((item) => item.company.raw), ["腾讯", "阿里巴巴"]);
 assert.deepEqual(internships.workExperiences.map((item) => item.rawTitle), ["产品实习生", "研发实习生"]);
-assert.equal(internships.parseStatus, "COMPLETE");
+assert.equal(internships.parseStatus, "PARTIAL", "缺少姓名时不能标记为完整简历");
 
 const unheadedInternship = ["教育经历", "2019-2023 | 北京大学 | 计算机科学", "2022-2023 | 北京大学实验室 | Research Intern"].join("\n");
 const unheaded = parseResumeText(textSource(unheadedInternship), unheadedInternship, parsedAt);
@@ -280,7 +302,7 @@ const mixedNoHeadings = [
 const mixed = parseResumeText(textSource(mixedNoHeadings), mixedNoHeadings, parsedAt);
 assert.equal(mixed.educations.length, 2);
 assert.equal(mixed.workExperiences.length, 2);
-assert.equal(mixed.parseStatus, "COMPLETE");
+assert.equal(mixed.parseStatus, "PARTIAL", "缺少姓名时不能标记为完整简历");
 
 const separateRecords = "上海电力大学，2020-2024\n上海理工大学，软件工程，2025-至今";
 const separated = parseResumeText(textSource(separateRecords), separateRecords, parsedAt);

@@ -30,6 +30,9 @@ export async function parseCandidateQuery(
   const parsedProfile = extraction.ok
     ? dependencies.parser.parse(source, extraction.text, parsedAt)
     : dependencies.parser.failed(source, parsedAt, extraction.message);
+  if (extraction.ok && extraction.warnings?.length) {
+    parsedProfile.warnings = [...new Set([...parsedProfile.warnings, ...extraction.warnings])];
+  }
   const profile = addResearchFunctions(parsedProfile, dependencies);
   try {
     const saved = dependencies.repository.saveProfile(profile, requestedBy, reuseExisting);

@@ -1,4 +1,5 @@
 import type { PossibleFunctionsSummary } from "./possible-functions";
+import type { ResumeFileFormat } from "../../../shared/domain/import-file";
 
 export type CandidateSourceType = "FILE" | "TEXT";
 
@@ -19,7 +20,7 @@ export type CandidateSourcePayload =
   | { sourceType: "TEXT"; sourceFormat: "plain-text"; text: string }
   | {
       sourceType: "FILE";
-      sourceFormat: "pdf" | "doc" | "docx" | "txt";
+      sourceFormat: ResumeFileFormat;
       mimeType: string;
       bytes: Uint8Array;
     };

@@ -105,7 +105,7 @@ const missing = structuredClone(longDraft);
 missing.employee.name = "";
 const missingResult = employeeDataApplication.importResumes([missing], actor);
 assert.equal(missingResult.kind, "validation_failed");
-if (missingResult.kind === "validation_failed") assert.equal(missingResult.issues.find(issue => issue.field === "name")?.message, "请填写该字段。");
+if (missingResult.kind === "validation_failed") assert.equal(missingResult.issues.find(issue => issue.field === "name")?.message, "未识别到姓名，请核对并补充。");
 const large = repository.publishEmployeeData({
   employees: Array.from({ length: 10_000 }, (_, i) => ({ employeeId: `large-${i}`, name: `Person ${i}`, email: "", currentDepartment: "", currentTitle: "" })),
   workExperiences: [], educationExperiences: [],

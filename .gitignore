@@ -52,3 +52,6 @@ next-env.d.ts
 !/docs/research.json
 
 /test_file
+
+# Local resume corpus; contains personal data.
+/profile/

@@ -20,7 +20,10 @@ export function validateEmployeeResume(draft: EmployeeResumeDraft, today: string
   const issues: { sheet: string; row: number; field: string; code: string; message: string }[] = [];
   const add = (sheet: string, row: number, field: string, message: string) => issues.push({ sheet, row, field, code: "INVALID_VALUE", message });
   const text = (sheet: string, row: number, field: string, value: string, required = true) => {
-    if (required && !value.trim()) add(sheet, row, field, "请填写该字段。");
+    if (required && !value.trim()) {
+      const label: Record<string, string> = { name: "姓名", company: "公司", school: "学校" };
+      add(sheet, row, field, `未识别到${label[field] ?? field}，请核对并补充。`);
+    }
   };
   for (const field of ["employeeId", "name", "email", "currentDepartment", "currentTitle"] as const) text("Employees", 1, field, draft.employee[field], field === "name");
   if (draft.employee.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(draft.employee.email.trim())) add("Employees", 1, "email", "请填写有效的员工工作邮箱，未知可留空。");

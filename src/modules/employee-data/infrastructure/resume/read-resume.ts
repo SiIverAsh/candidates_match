@@ -14,6 +14,7 @@ export const employeeResumeReader: EmployeeResumeReader = {
     const extracted = await extractResumeText(source);
     if (!extracted.ok) return { kind: "rejected", message: extracted.message };
     const profile = parseResumeText(source, extracted.text, now);
+    profile.warnings = [...new Set([...profile.warnings, ...(extracted.warnings ?? [])])];
     const draft = profileToEmployeeDraft(profile, {
       employeeId: `resume-${createHash("sha256").update(extracted.text).digest("hex").slice(0, 20)}`,
       email: profile.identity?.email ?? "",

@@ -1,7 +1,8 @@
 import type { CANDIDATE_FUNCTION_FILTERS } from "./possible-functions";
+import { RESUME_FILE_FORMATS } from "../../../shared/domain/import-file";
 
 export const CANDIDATE_PARSE_STATUSES = ["COMPLETE", "PARTIAL", "INSUFFICIENT", "FAILED", "PENDING"] as const;
-export const CANDIDATE_SOURCE_FORMATS = ["pdf", "doc", "docx", "txt", "plain-text"] as const;
+export const CANDIDATE_SOURCE_FORMATS = [...RESUME_FILE_FORMATS, "plain-text"] as const;
 export const CANDIDATE_MATCH_STATUSES = ["FOUND", "NO_RESULTS", "INSUFFICIENT", "PENDING"] as const;
 
 export interface CandidateColumnFilters {

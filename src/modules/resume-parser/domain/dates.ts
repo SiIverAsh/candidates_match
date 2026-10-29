@@ -14,9 +14,9 @@ const NUMERIC_DATE = String.raw`(?<!\d)${YEAR_PATTERN}(?:[ \t]*(?:[./-][ \t]*${D
 const ENGLISH_DATE = String.raw`\b(?:${MONTH_PATTERN}[ \t./-]+(?:\d{1,2}(?:st|nd|rd|th)?[ ,\t./-]+)?${YEAR_PATTERN}|\d{1,2}(?:st|nd|rd|th)?[ \t]+${MONTH_PATTERN}[ ,\t]+${YEAR_PATTERN})(?!\d)`;
 const MONTH_YEAR = String.raw`(?<![\d/.])(?:0?[1-9]|1[0-2])[/.-]${YEAR_PATTERN}(?!\d)`;
 export const DATE_POINT_PATTERN = String.raw`(?:${ENGLISH_DATE}|${MONTH_YEAR}|${NUMERIC_DATE})`;
-export const DATE_RANGE_PATTERN = String.raw`${DATE_POINT_PATTERN}\s*(?:—|–|~|～|至|到|-|\b(?:to|until|through)\b)\s*(?:${DATE_POINT_PATTERN}|至今|现在|\b(?:present|current|now|ongoing|(?:to\s+)?date)\b)`;
+export const DATE_RANGE_PATTERN = String.raw`${DATE_POINT_PATTERN}\s*(?:[-—–‐‑‒−~～]+|至|到|\b(?:to|until|till|through)\b)\s*(?:${DATE_POINT_PATTERN}|至[ \t]*今|今|现[ \t]*在|\b(?:(?:till\s+)?now|present|current|ongoing|(?:to\s+)?date)\b)`;
 const DATE_TOKEN = new RegExp(DATE_POINT_PATTERN, "giu");
-const CURRENT_VALUE = /至今|现在|\b(?:present|current|now|ongoing|to\s+date)\b/iu;
+const CURRENT_VALUE = /(?:至|到|[-—–‐‑‒−~～])[ \t]*今|现[ \t]*在|\b(?:present|current|now|ongoing|to\s+date)\b/iu;
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
 function parseDateToken(token: string): ParsedDate | null {

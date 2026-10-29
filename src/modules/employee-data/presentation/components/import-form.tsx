@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { api, ApiError } from "@/client/api";
 import { INITIAL_IMPORT_STATE, type ImportActionState } from "../contracts";
-import { importFileKind } from "@/shared/domain/import-file";
+import { importFileKind, RESUME_FILE_EXTENSIONS } from "@/shared/domain/import-file";
 import type { EmployeeResumeDraft } from "../../domain/resume-import";
 import { EmployeeResumeEditor } from "./employee-resume-editor";
 import { MAX_EMPLOYEE_IMPORT_BYTES } from "../../domain/policies";
@@ -33,7 +33,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
 
   async function importAutomatically(files: File[]) {
     if (busy.current) return;
-    if (!files.length) { showError("未找到 PDF、DOC、DOCX 或 TXT 简历。"); return; }
+    if (!files.length) { showError("所选文件夹中没有文件。"); return; }
     busy.current = true; setPending(true); setFile(null); setDrafts([]); setState(INITIAL_IMPORT_STATE); setBatch(null);
     try {
       const result = await importResumeFiles(files, { preview: api.previewEmployeeResume, publish: api.importEmployeeResumes, progress: setBatch });
@@ -44,10 +44,9 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
   async function receiveFiles(files: File[]) {
     if (busy.current || !files.length) return;
     const kinds = files.map(item => importFileKind(item.name));
-    if (kinds.some(kind => !kind)) { showError("支持 PDF、DOC、DOCX、TXT 简历或 .xlsx 员工表格。"); return; }
-    if (kinds.includes("workbook") && files.length !== 1) { showError("Excel 请单独导入；多文件导入支持简历文件。"); return; }
     if (files.length > 1) { await importAutomatically(files); return; }
-    if (files.some((item, index) => !item.size || item.size > (kinds[index] === "workbook" ? MAX_EMPLOYEE_IMPORT_BYTES : CANDIDATE_INTAKE_POLICY.maxFileBytes))) { showError("文件不能为空；简历最大 5 MB，Excel 最大 10 MB。"); return; }
+    if (!kinds[0]) { showError("支持 PDF、Word、TXT、HTML、PPTX、MSG 简历，或 .xlsx 员工表格。"); return; }
+    if (files.some((item, index) => !item.size || item.size > (kinds[index] === "workbook" ? MAX_EMPLOYEE_IMPORT_BYTES : CANDIDATE_INTAKE_POLICY.maxFileBytes))) { showError("文件不能为空；简历最大 50 MB，Excel 最大 10 MB。"); return; }
     setBatch(null); setFile(files[0]); setDrafts([]); setState(INITIAL_IMPORT_STATE);
     if (kinds[0] === "workbook") return;
     busy.current = true; setPending(true);
@@ -104,13 +103,13 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}
           onDrop={event => { event.preventDefault(); dragDepth.current = 0; setDragging(false); void receiveFiles(Array.from(event.dataTransfer.files)); }}>
           <strong>{dragging ? "松开文件，自动识别简历或 Excel" : "拖入员工简历或 Excel，也可点击选择"}</strong>
-          <span>PDF、DOC、DOCX、TXT 简历每份最大 5 MB；.xlsx 表格最大 10 MB。</span>
+          <span>PDF、Word、TXT、HTML、PPTX、MSG 简历每份最大 50 MB；.xlsx 表格最大 10 MB。</span>
           <span>单份简历解析后可核对；多份简历将自动解析并导入。Excel 表格全部校验通过后生效。</span>
-          <input className="sr-only" id="employeeFile" name="employeeFile" type="file" multiple accept=".pdf,.doc,.docx,.txt,.xlsx" disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
+          <input className="sr-only" id="employeeFile" name="employeeFile" type="file" multiple accept={[...RESUME_FILE_EXTENSIONS.map(extension => `.${extension}`), ".xlsx"].join(",")} disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
         </label>
         <label className="secondary-link" htmlFor="employeeFolder">选择文件夹并自动导入简历</label>
-        <input className="sr-only" id="employeeFolder" type="file" multiple disabled={pending} ref={element => element?.setAttribute("webkitdirectory", "")} onChange={event => { const files = Array.from(event.currentTarget.files ?? []).filter(item => importFileKind(item.name) === "resume"); event.currentTarget.value = ""; void importAutomatically(files); }} />
-        {batch ? <section aria-live="polite"><p>{pending ? "正在处理" : "处理完成"}：{batch.processed} / {batch.total}，已导入 {batch.imported} 份，失败 {batch.failures.length} 份。</p>{batch.interrupted ? <p role="alert">{batch.interrupted}</p> : null}{batch.failures.length ? <details><summary>查看未导入文件及原因</summary><ul>{batch.failures.map((item, index) => <li key={`${index}:${item.name}`}>{item.name}：{item.message}</li>)}</ul></details> : null}</section> : null}
+        <input className="sr-only" id="employeeFolder" type="file" multiple disabled={pending} ref={element => element?.setAttribute("webkitdirectory", "")} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void importAutomatically(files); }} />
+        {batch ? <section aria-live="polite"><p>{batch.interrupted ? "处理已中断" : pending ? "正在处理" : "处理完成"}：已检查 {batch.checked} / {batch.total} 份，已导入 {batch.imported} 份，失败 {batch.failures.length} 份。</p>{batch.interrupted ? <p role="alert">{batch.interrupted}</p> : null}{batch.failures.length ? <details><summary>查看未导入文件及原因</summary><ul>{batch.failures.map((item, index) => <li key={`${index}:${item.name}`}>{item.name}：{item.message}</li>)}</ul></details> : null}</section> : null}
         {file && workbook ? <p role="status">已选择：{file.name} · 多人 Excel</p> : null}
         {drafts.map((item, index) => <section key={`${index}:${item.name}`}>
           <p><strong>简历 {index + 1}：{item.name}</strong> <button className="text-button" type="button" disabled={pending} onClick={() => setDrafts(current => current.filter((_, i) => i !== index))}>移除</button></p>

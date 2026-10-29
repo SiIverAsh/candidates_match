@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Download, FileText, Network, Upload } from "lucide-react";
 import { api } from "@/client/api";
-import { importFileKind } from "@/shared/domain/import-file";
+import { importFileKind, RESUME_FILE_EXTENSIONS } from "@/shared/domain/import-file";
 import { useBatchTask } from "@/modules/candidate-batch/presentation/use-batch-task";
 import { useWorkbookReport } from "@/modules/candidate-batch/presentation/use-workbook-report";
 import { BatchProgress } from "@/modules/candidate-batch/presentation/batch-progress";
@@ -54,12 +54,12 @@ export function CandidateMatchPanel({ onBusyChange }: {
     const file = files[0];
     const kind = importFileKind(file.name);
     if (!kind) {
-      setFileError("请上传 PDF、DOC、DOCX、TXT 简历，或 .xlsx 多人表格。");
+      setFileError("请上传 PDF、Word、TXT、HTML、PPTX、MSG 简历，或 .xlsx 多人表格。");
       return;
     }
     const maxBytes = kind === "workbook" ? CANDIDATE_WORKBOOK_LIMITS.maxBytes : CANDIDATE_INTAKE_POLICY.maxFileBytes;
     if (!file.size || file.size > maxBytes) {
-      setFileError(kind === "workbook" ? "Excel 不能为空，最大 10 MB。" : "简历不能为空，最大 5 MB。");
+      setFileError(kind === "workbook" ? "Excel 不能为空，最大 10 MB。" : "简历不能为空，最大 50 MB。");
       return;
     }
     setFileError(null);
@@ -128,10 +128,10 @@ export function CandidateMatchPanel({ onBusyChange }: {
                 }}>
                 <span className="matching-upload-icon"><Upload size={27} /></span>
                 <strong>{pending ? "正在处理资料…" : dragging ? "松开文件，自动识别并匹配" : "拖入单人简历或多人 Excel"}</strong>
-                <span>PDF、DOC、DOCX、TXT 最大 5 MB；.xlsx 最大 10 MB</span>
+                <span>PDF、Word、TXT、HTML、PPTX、MSG 最大 50 MB；.xlsx 最大 10 MB</span>
                 <span className="matching-choose-file">选择文件</span>
                 <small>简历直接显示单人结果；Excel 自动下载多人匹配结果</small>
-                <input className="sr-only" id="resumeFile" type="file" accept=".pdf,.doc,.docx,.txt,.xlsx" disabled={pending} onChange={(event) => {
+                <input className="sr-only" id="resumeFile" type="file" accept={[...RESUME_FILE_EXTENSIONS.map(extension => `.${extension}`), ".xlsx"].join(",")} disabled={pending} onChange={(event) => {
                   void receiveFiles(Array.from(event.currentTarget.files ?? []));
                   event.currentTarget.value = "";
                 }} />

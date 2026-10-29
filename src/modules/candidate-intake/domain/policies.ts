@@ -1,9 +1,11 @@
+import { MAX_RESUME_FILE_BYTES, RESUME_FILE_EXTENSIONS } from "../../../shared/domain/import-file";
+
 export const CANDIDATE_INTAKE_POLICY = {
-  maxFileBytes: 5 * 1024 * 1024,
+  maxFileBytes: MAX_RESUME_FILE_BYTES,
   minTextCharacters: 80,
   maxTextCharacters: 100_000,
   retentionDays: 7,
-  allowedExtensions: ["pdf", "doc", "docx", "txt"],
+  allowedExtensions: RESUME_FILE_EXTENSIONS,
 } as const;
 
 export type CandidateTextIssueCode =

@@ -13,7 +13,7 @@ export interface ResumeSourceRepository {
 }
 
 export type TextExtractionResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; warnings?: string[] }
   | { ok: false; code: string; message: string };
 
 export interface ResumeTextExtractor {

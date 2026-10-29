@@ -1,8 +1,10 @@
 import type { EmployeeResumeDraft } from "../domain/resume-import";
 import type { EmployeeDataVersionSummary } from "../domain/models";
+import { resumeImportFileIssue } from "../../../shared/domain/import-file";
 
 export interface ResumeFileBatchResult {
   imported: number;
+  checked: number;
   processed: number;
   total: number;
   failures: { name: string; message: string }[];
@@ -21,7 +23,7 @@ export async function importResumeFiles(
     progress(result: ResumeFileBatchResult): void;
   },
 ): Promise<ResumeFileBatchResult> {
-  const result: ResumeFileBatchResult = { imported: 0, processed: 0, total: files.length, failures: [], version: null, interrupted: null };
+  const result: ResumeFileBatchResult = { imported: 0, checked: 0, processed: 0, total: files.length, failures: [], version: null, interrupted: null };
   let pending: PendingResume[] = [];
   let pendingBytes = 0;
   const report = () => ports.progress({ ...result, failures: [...result.failures] });
@@ -51,13 +53,18 @@ export async function importResumeFiles(
       await publish(batch);
     }
   }
+  report();
   try {
     for (const file of files) {
       const name = file.webkitRelativePath || file.name;
+      const issue = resumeImportFileIssue(file);
+      if (issue) { result.failures.push({ name, message: issue }); result.checked++; result.processed++; report(); continue; }
       let parsed: Awaited<ReturnType<typeof ports.preview>>;
       try { parsed = await ports.preview(file); }
-      catch { result.failures.push({ name, message: "读取失败，请检查文件后重试。" }); result.processed++; report(); continue; }
+      catch { result.failures.push({ name, message: "读取失败，请检查文件后重试。" }); result.checked++; result.processed++; report(); continue; }
+      result.checked++;
       if (parsed.kind === "rejected") { result.failures.push({ name, message: parsed.message }); result.processed++; report(); continue; }
+      report();
       const bytes = new TextEncoder().encode(JSON.stringify(parsed.draft)).byteLength;
       if (pending.length && (pending.length >= 100 || pendingBytes + bytes > 6 * 1024 * 1024)) await flush();
       pending.push({ name, draft: parsed.draft });

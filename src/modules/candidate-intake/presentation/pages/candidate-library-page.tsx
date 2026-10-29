@@ -14,7 +14,7 @@ import { CANDIDATE_FUNCTION_FILTERS, CANDIDATE_FUNCTION_LABELS } from "../../dom
 import { PossibleFunctionsCell } from "../components/possible-functions-cell";
 
 const PARSE_LABELS = { COMPLETE: "解析完整", PARTIAL: "部分解析", INSUFFICIENT: "信息不足", FAILED: "解析失败", PENDING: "待解析" };
-const SOURCE_LABELS = { pdf: "PDF", doc: "DOC", docx: "DOCX", txt: "TXT", "plain-text": "文本 / Excel" };
+const SOURCE_LABELS = { pdf: "PDF", doc: "DOC", docx: "DOCX", txt: "TXT", html: "HTML", pptx: "PPTX", jpg: "JPG", jpeg: "JPEG", png: "PNG", msg: "MSG", "plain-text": "文本 / Excel" };
 const MATCH_LABELS = { FOUND: "已找到匹配", NO_RESULTS: "未找到匹配", INSUFFICIENT: "信息不足，未匹配", PENDING: "尚未生成匹配" };
 const PARSE_OPTIONS = CANDIDATE_PARSE_STATUSES.map(value => ({ value, label: PARSE_LABELS[value] }));
 const SOURCE_OPTIONS = CANDIDATE_SOURCE_FORMATS.map(value => ({ value, label: SOURCE_LABELS[value] }));

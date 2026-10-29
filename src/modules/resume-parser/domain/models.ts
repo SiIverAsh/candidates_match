@@ -1,5 +1,6 @@
 import type { ResearchFunctionAssessment } from "../../research-functions/domain/models";
 import type { PersonIdentity } from "../../../shared/domain/person-identity";
+import type { ResumeFileFormat } from "../../../shared/domain/import-file";
 
 export type ParseStatus = "COMPLETE" | "PARTIAL" | "INSUFFICIENT" | "FAILED";
 export type DatePrecision = "DAY" | "MONTH" | "YEAR" | "UNKNOWN";
@@ -70,7 +71,7 @@ export interface ResumeSource {
   queryId: string;
   submittedBy: string;
   sourceType: "FILE" | "TEXT";
-  sourceFormat: "plain-text" | "pdf" | "doc" | "docx" | "txt";
+  sourceFormat: "plain-text" | ResumeFileFormat;
   text: string | null;
   bytes: Uint8Array | null;
   expiresAt: string;

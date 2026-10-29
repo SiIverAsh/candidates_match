@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { Download, Files, FileSpreadsheet, FolderOpen, Upload, X } from "lucide-react";
 import { api } from "@/client/api";
+import { importFileKind, MAX_RESUME_FILE_BYTES, RESUME_FILE_EXTENSIONS } from "@/shared/domain/import-file";
 import { BATCH_LIMITS } from "../domain/models";
 import { CANDIDATE_WORKBOOK_LIMITS } from "../domain/workbook";
 import { useBatchTask } from "./use-batch-task";
@@ -58,7 +59,7 @@ export function BatchCandidateMatchPanel({ onBusyChange }: { onBusyChange: (busy
   const bytes = files.reduce((total, file) => total + file.size, 0);
   const selectionError = workbook
     ? files.length > 1 ? "每批请选择一份 Excel。" : files.some(file => !file.name.toLowerCase().endsWith(".xlsx")) ? "仅支持 .xlsx 文件。" : bytes > CANDIDATE_WORKBOOK_LIMITS.maxBytes ? "Excel 文件不能超过 10 MB。" : ""
-    : files.some(file => !/\.(pdf|docx|txt)$/iu.test(file.name)) ? "简历文件仅支持 PDF、DOCX、TXT；Excel 请切换到表格模式。" : files.length > BATCH_LIMITS.maxFiles ? "每批最多 50 份简历，请分批上传。" : bytes > BATCH_LIMITS.maxTotalBytes ? "每批总大小不能超过 25 MB。" : "";
+    : files.some(file => importFileKind(file.name) !== "resume") ? "支持 PDF、Word、TXT、HTML、PPTX、MSG 简历；Excel 请切换到表格模式。" : files.some(file => !file.size || file.size > MAX_RESUME_FILE_BYTES) ? "简历不能为空，每份最大 50 MB。" : files.length > BATCH_LIMITS.maxFiles ? "每批最多 50 份简历，请分批上传。" : bytes > BATCH_LIMITS.maxTotalBytes ? "每批总大小不能超过 25 MB。" : "";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -91,10 +92,10 @@ export function BatchCandidateMatchPanel({ onBusyChange }: { onBusyChange: (busy
           onDrop={dropFiles}>
           <span className="matching-upload-icon">{workbook ? <FileSpreadsheet size={27} /> : <FolderOpen size={27} />}</span>
           <strong>{dragging ? "松开鼠标，添加待匹配资料" : workbook ? "拖入候选人表格，一次匹配全部候选人" : "拖入多份简历，一次完成多人匹配"}</strong>
-          <span>{workbook ? ".xlsx · 最大 10 MB · 不设候选人人数上限" : "PDF、DOCX、TXT · 最多 50 份 · 总大小不超过 25 MB"}</span>
+          <span>{workbook ? ".xlsx · 最大 10 MB · 不设候选人人数上限" : "PDF、Word、TXT、HTML、PPTX、MSG · 最多 50 份 · 总大小不超过 25 MB"}</span>
           <span className="matching-choose-file"><Upload size={14} />{workbook ? "选择 Excel 文件" : "选择多份简历"}</span>
-          <small>{workbook ? "支持自己的表格，无需先改成模板格式" : "每份最大 5 MB，选好后点击下方按钮开始"}</small>
-          <input className="sr-only" ref={input} id="batch-match-files" type="file" accept={workbook ? ".xlsx" : ".pdf,.docx,.txt"} multiple={!workbook} disabled={busy} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} />
+          <small>{workbook ? "支持自己的表格，无需先改成模板格式" : "选好后点击下方按钮开始"}</small>
+          <input className="sr-only" ref={input} id="batch-match-files" type="file" accept={workbook ? ".xlsx" : RESUME_FILE_EXTENSIONS.map(extension => `.${extension}`).join(",")} multiple={!workbook} disabled={busy} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} />
         </label>
         {files.length ? <div className="matching-file-selection">
           <div className="batch-file-heading"><strong>已选择 {files.length} 份资料 <span>· {(bytes / 1024 / 1024).toFixed(2)} MB</span></strong><button className="text-button" type="button" disabled={busy} onClick={() => selectFiles([])}>清空</button></div>
