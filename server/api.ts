@@ -17,7 +17,8 @@ import { matchingApplication } from "../src/modules/matching/composition";
 import { resumeParserApplication } from "../src/modules/resume-parser/composition";
 import type { ImportEmployeeWorkbookResult } from "../src/modules/employee-data/application/import-employee-workbook";
 import type { ImportActionState } from "../src/modules/employee-data/presentation/contracts";
-import { employeeResumeDraftSchema } from "../src/modules/employee-data/presentation/contracts";
+import { EmployeeImportConflict } from "../src/modules/employee-data/domain/resume-import";
+import { employeeResumeDraftSchema, employeeResumesSchema, deleteEmployeesSchema } from "../src/modules/employee-data/presentation/contracts";
 import { enterpriseAiApplication } from "../src/modules/enterprise-ai/composition";
 import { chatRequestSchema } from "../src/modules/enterprise-ai/presentation/contracts";
 import { AiError } from "../src/modules/enterprise-ai/domain/models";
@@ -497,6 +498,32 @@ export async function handleApi(
 
   if (request.method === "GET" && url.pathname === "/api/admin/employee-data/employees") {
     sendJson(response, 200, employeeDataApplication.list({ page: Number(url.searchParams.get("page") ?? 1), search: url.searchParams.get("search") ?? "" }));
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/employee-data/employees/delete") {
+    let json: unknown;
+    try { json = JSON.parse((await readBody(request, 256 * 1024)).toString("utf8")); }
+    catch (error) { if (error instanceof RequestBodyError) throw error; sendJson(response, 400, { error: "删除请求格式无效。" }); return true; }
+    const parsed = deleteEmployeesSchema.safeParse(json);
+    if (!parsed.success) { sendJson(response, 400, { error: "请选择有效的员工记录。" }); return true; }
+    try {
+      const version = employeeDataApplication.deleteEmployees(parsed.data.versionId, parsed.data.employeeIds, { id: user.id, displayName: user.displayName });
+      sendJson(response, 200, { version });
+    } catch (error) {
+      if (error instanceof EmployeeImportConflict) sendJson(response, 409, { error: error.message });
+      else throw error;
+    }
+    return true;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/employee-data/resumes") {
+    let json: unknown;
+    try { json = JSON.parse((await readBody(request, 32 * 1024 * 1024)).toString("utf8")); }
+    catch (error) { if (error instanceof RequestBodyError) throw error; sendJson(response, 400, { error: "员工资料格式无效。" }); return true; }
+    const parsed = employeeResumesSchema.safeParse(json);
+    if (!parsed.success) { sendJson(response, 400, { error: "员工资料字段或经历格式无效。" }); return true; }
+    sendJson(response, 200, importState(employeeDataApplication.importResumes(parsed.data, { id: user.id, displayName: user.displayName })));
     return true;
   }
 

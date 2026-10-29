@@ -78,7 +78,7 @@ export function EmployeeDataPage({
             <div>
               <p className="eyebrow">员工数据导入与版本</p>
               <h1>员工导入与管理</h1>
-              <p>拖入简历导入一位员工，或使用中文 Excel 名单批量导入；自动识别姓名、工作和教育经历。</p>
+              <p>拖入一份或多份简历，或使用中文 Excel 名单批量导入；自动识别姓名、工作和教育经历。</p>
             </div>
             <span className="status-chip">服务端鉴权</span>
           </div>
@@ -88,8 +88,8 @@ export function EmployeeDataPage({
                 <p className="eyebrow">当前生效版本</p>
                 <h2 id="active-version-title">{overview.activeVersion?.id ?? "尚无可用数据版本"}</h2>
               </div>
-              <span className={`version-state ${overview.activeVersion ? "is-active" : "is-empty"}`}>
-                {overview.activeVersion ? "已生效" : "暂不可匹配"}
+              <span className={`version-state ${overview.activeVersion?.employeeCount ? "is-active" : "is-empty"}`}>
+                {overview.activeVersion?.employeeCount ? "已生效" : "暂不可匹配"}
               </span>
             </div>
             {overview.activeVersion ? (
@@ -105,7 +105,7 @@ export function EmployeeDataPage({
             )}
           </section>
           <EmployeeImportForm onImported={loadOverview} />
-          <EmployeeDirectory key={overview.activeVersion?.id ?? "empty"} />
+          <EmployeeDirectory key={overview.activeVersion?.id ?? "empty"} onChanged={loadOverview} />
           <section className="history-panel" aria-labelledby="history-title">
             <div className="section-heading"><div><p className="eyebrow">最近活动</p><h2 id="history-title">导入记录</h2></div></div>
             {overview.recentAttempts.length ? (

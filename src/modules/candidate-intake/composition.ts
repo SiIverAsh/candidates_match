@@ -18,7 +18,7 @@ const employeeVersions = {
   readiness: () => {
     const activeVersion = employeeDataApplication.getOverview().activeVersion;
     return {
-      ready: Boolean(activeVersion),
+      ready: Boolean(activeVersion && activeVersion.employeeCount > 0),
       activeVersion: activeVersion
         ? {
             id: activeVersion.id,

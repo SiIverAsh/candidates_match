@@ -11,6 +11,9 @@ export const employeeResumeDraftSchema = z.object({
   warnings: z.array(z.string().max(1000)).max(500),
 }).strict();
 
+export const employeeResumesSchema = z.array(employeeResumeDraftSchema).min(1).max(20);
+export const deleteEmployeesSchema = z.object({ versionId: z.string().min(1).max(100), employeeIds: z.array(z.string().min(1).max(300)).min(1).max(500).refine(ids => new Set(ids).size === ids.length) }).strict();
+
 export interface ImportActionState {
   status: "idle" | "success" | "error";
   message: string;

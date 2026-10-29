@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-import { api } from "@/client/api";
+import { api, ApiError } from "@/client/api";
 import { INITIAL_IMPORT_STATE, type ImportActionState } from "../contracts";
 import { importFileKind } from "@/shared/domain/import-file";
 import type { EmployeeResumeDraft } from "../../domain/resume-import";
@@ -12,7 +12,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
   const [state, setState] = useState<ImportActionState>(INITIAL_IMPORT_STATE);
   const [pending, setPending] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [draft, setDraft] = useState<EmployeeResumeDraft | null>(null);
+  const [drafts, setDrafts] = useState<{ name: string; draft: EmployeeResumeDraft | null; error?: string }[]>([]);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const busy = useRef(false);
@@ -31,36 +31,39 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
 
   async function receiveFiles(files: File[]) {
     if (busy.current || !files.length) return;
-    if (files.length !== 1) { showError("一次请选择一份员工简历或一份 Excel；多人资料请使用 Excel。"); return; }
-    const selected = files[0];
-    const kind = importFileKind(selected.name);
-    if (!kind) { showError("支持 PDF、DOC、DOCX、TXT 单人简历，或 .xlsx 多人员工表格。"); return; }
-    const maxBytes = kind === "workbook" ? MAX_EMPLOYEE_IMPORT_BYTES : CANDIDATE_INTAKE_POLICY.maxFileBytes;
-    if (!selected.size || selected.size > maxBytes) { showError(kind === "workbook" ? "Excel 不能为空，最大 10 MB。" : "简历不能为空，最大 5 MB。"); return; }
-    setFile(selected); setDraft(null); setState(INITIAL_IMPORT_STATE);
-    if (kind === "workbook") return;
+    if (files.length > 20) { showError("一次最多选择 20 份简历。"); return; }
+    const kinds = files.map(item => importFileKind(item.name));
+    if (kinds.some(kind => !kind)) { showError("支持 PDF、DOC、DOCX、TXT 简历或 .xlsx 员工表格。"); return; }
+    if (kinds.includes("workbook") && files.length !== 1) { showError("Excel 请单独导入；多文件导入支持简历文件。"); return; }
+    if (files.some((item, index) => !item.size || item.size > (kinds[index] === "workbook" ? MAX_EMPLOYEE_IMPORT_BYTES : CANDIDATE_INTAKE_POLICY.maxFileBytes))) { showError("文件不能为空；简历最大 5 MB，Excel 最大 10 MB。"); return; }
+    setFile(files[0]); setDrafts([]); setState(INITIAL_IMPORT_STATE);
+    if (kinds[0] === "workbook") return;
     busy.current = true; setPending(true);
+    const results: { name: string; draft: EmployeeResumeDraft | null; error?: string }[] = [];
     try {
-      const result = await api.previewEmployeeResume(selected);
-      if (result.kind === "parsed") setDraft(result.draft);
-      else showError(result.message);
-    } catch { showError("简历读取失败，请检查文件后重试。"); }
-    finally { busy.current = false; setPending(false); }
+      for (const selected of files) {
+        try {
+          const result = await api.previewEmployeeResume(selected);
+          results.push(result.kind === "parsed" ? { name: selected.name, draft: result.draft } : { name: selected.name, draft: null, error: result.message });
+        } catch { results.push({ name: selected.name, draft: null, error: "简历读取失败，请检查文件后重试。" }); }
+        setDrafts([...results]);
+      }
+    } finally { busy.current = false; setPending(false); }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy.current || !file || (!workbook && !draft)) return;
+    if (busy.current || !file || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))) return;
     busy.current = true;
     setPending(true);
     try {
-      const result = workbook ? await api.importEmployees(file) : await api.importEmployeeResume(draft!);
+      const result = workbook ? await api.importEmployees(file) : await api.importEmployeeResumes(drafts.map(item => item.draft!));
       setState(result);
-      if (result.status === "success") { setFile(null); setDraft(null); await onImported(); }
-    } catch {
+      if (result.status === "success") { setFile(null); setDrafts([]); await onImported(); }
+    } catch (error) {
       setState({
         status: "error",
-        message: "请求失败，请稍后重试。",
+        message: error instanceof ApiError && error.status === 413 ? "简历资料总量过大，请分批导入。" : "请求失败，请稍后重试。",
         issues: [],
         totalIssueCount: 0,
         version: null,
@@ -88,18 +91,21 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = busy.current ? "none" : "copy"; }}
           onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}
           onDrop={event => { event.preventDefault(); dragDepth.current = 0; setDragging(false); void receiveFiles(Array.from(event.dataTransfer.files)); }}>
-          <strong>{dragging ? "松开文件，自动识别单人或多人" : "拖入员工简历或 Excel，也可点击选择"}</strong>
-          <span>PDF、DOC、DOCX、TXT 为单人简历，最大 5 MB；.xlsx 为多人员工表格，最大 10 MB。</span>
-          <span>单人解析后核对资料再导入；多人表格最多 10,000 位员工，全部校验通过后生效。</span>
-          <input className="sr-only" id="employeeFile" name="employeeFile" type="file" accept=".pdf,.doc,.docx,.txt,.xlsx" disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
+          <strong>{dragging ? "松开文件，自动识别简历或 Excel" : "拖入员工简历或 Excel，也可点击选择"}</strong>
+          <span>PDF、DOC、DOCX、TXT 简历每份最大 5 MB，一次最多 20 份；.xlsx 表格最大 10 MB。</span>
+          <span>简历自动解析后请逐份核对；Excel 表格最多 10,000 位员工，全部校验通过后生效。</span>
+          <input className="sr-only" id="employeeFile" name="employeeFile" type="file" multiple accept=".pdf,.doc,.docx,.txt,.xlsx" disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
         </label>
-        {file ? <p role="status">已选择：{file.name} · {workbook ? "多人 Excel" : "单人简历"}</p> : null}
-        {draft ? <EmployeeResumeEditor draft={draft} onChange={setDraft} disabled={pending} /> : null}
-        <button className="primary-button" disabled={pending || !file || (!workbook && !draft)} type="submit">
+        {file && workbook ? <p role="status">已选择：{file.name} · 多人 Excel</p> : null}
+        {drafts.map((item, index) => <section key={`${index}:${item.name}`}>
+          <p><strong>简历 {index + 1}：{item.name}</strong> <button className="text-button" type="button" disabled={pending} onClick={() => setDrafts(current => current.filter((_, i) => i !== index))}>移除</button></p>
+          {item.draft ? <EmployeeResumeEditor draft={item.draft} onChange={draft => setDrafts(current => current.map((entry, i) => i === index ? { ...entry, draft } : entry))} disabled={pending} /> : <p role="alert">{item.error}</p>}
+        </section>)}
+        <button className="primary-button" disabled={pending || !file || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))} type="submit">
           {pending ? "正在处理…" : workbook ? "校验并发布多人数据" : "确认并加入员工库"}
         </button>
       </form>
-      <p className="schema-note">单人简历导入会加入现有员工库，不覆盖已有员工。Excel 请提供完整员工名单：发布后整体替代当前匹配数据；旧版本保留供复核。</p>
+      <p className="schema-note">简历导入会加入现有员工库，不覆盖已有员工。Excel 请提供完整员工名单：发布后整体替代当前匹配数据；旧版本保留供复核。</p>
       {state.status !== "idle" ? (
         <section
           className={`import-result import-result-${state.status}`}

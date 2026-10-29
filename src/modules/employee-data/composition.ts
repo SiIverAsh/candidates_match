@@ -1,6 +1,7 @@
+import { deleteEmployees as deleteEmployeeRecords } from "./application/delete-employees";
 import { getEmployeeDataOverview } from "./application/get-employee-data-overview";
 import { getEmployeeProfile, listEmployees } from "./application/browse-employees";
-import { importEmployeeResume, previewEmployeeResume } from "./application/import-employee-resume";
+import { importEmployeeResume, importEmployeeResumes, previewEmployeeResume } from "./application/import-employee-resume";
 import { employeeResumeReader } from "./infrastructure/resume/read-resume";
 import type { EmployeeResumeDraft } from "./domain/resume-import";
 import type { ImportActor, EmployeeResumeReader } from "./application/ports";
@@ -16,6 +17,7 @@ import {
   recordFailedImport,
   listCurrentEmployees,
   findEmployeeProfile,
+  deleteEmployees,
 } from "./infrastructure/sqlite/repository";
 
 const repository = {
@@ -27,6 +29,8 @@ const repository = {
 export const employeeDataApplication = {
   previewResume: (file: Parameters<EmployeeResumeReader["read"]>[0]) => previewEmployeeResume(file, employeeResumeReader),
   importResume: (draft: EmployeeResumeDraft, actor: ImportActor) => importEmployeeResume(draft, actor, { append: appendEmployeeData, recordFailedImport }, new Date().toISOString().slice(0, 10)),
+  importResumes: (drafts: EmployeeResumeDraft[], actor: ImportActor) => importEmployeeResumes(drafts, actor, { append: appendEmployeeData, recordFailedImport }, new Date().toISOString().slice(0, 10)),
+  deleteEmployees: (versionId: string, ids: string[], actor: ImportActor) => deleteEmployeeRecords(versionId, ids, actor, { delete: deleteEmployees }),
   list: (input: { page?: number; search?: string }) => listEmployees(input, { list: listCurrentEmployees, find: findEmployeeProfile }),
   getProfile: (employeeId: string, versionId: string) => getEmployeeProfile(employeeId, versionId, { list: listCurrentEmployees, find: findEmployeeProfile }),
   getOverview: () => getEmployeeDataOverview(repository),

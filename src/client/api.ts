@@ -90,6 +90,10 @@ export const api = {
     return request(`/api/admin/employee-data/employees?${new URLSearchParams({ page: String(page), search })}`);
   },
 
+  deleteEmployees(versionId: string, employeeIds: string[]): Promise<{ version: EmployeeDataOverview["activeVersion"] }> {
+    return request("/api/admin/employee-data/employees/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId, employeeIds }) });
+  },
+
   async employeeProfile(employeeId: string, versionId: string): Promise<EmployeeProfile> {
     const result = await request<{ profile: EmployeeProfile }>(`/api/admin/employee-data/employees/${encodeURIComponent(employeeId)}?${new URLSearchParams({ versionId })}`);
     return result.profile;
@@ -138,6 +142,10 @@ export const api = {
 
   importEmployeeResume(draft: EmployeeResumeDraft): Promise<ImportActionState> {
     return request("/api/admin/employee-data/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+  },
+
+  importEmployeeResumes(drafts: EmployeeResumeDraft[]): Promise<ImportActionState> {
+    return request("/api/admin/employee-data/resumes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(drafts) });
   },
 
   candidateReadiness(): Promise<CandidateReadiness> {
