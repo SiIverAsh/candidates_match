@@ -105,7 +105,7 @@ export function EmployeeDataPage({
             )}
           </section>
           <EmployeeImportForm onImported={loadOverview} />
-          <EmployeeDirectory key={overview.activeVersion?.id ?? "empty"} onChanged={loadOverview} />
+          <EmployeeDirectory key={overview.activeVersion?.id ?? "empty"} onChanged={loadOverview} totalEmployees={overview.activeVersion?.employeeCount ?? 0} overviewVersionId={overview.activeVersion?.id ?? null} />
           <section className="history-panel" aria-labelledby="history-title">
             <div className="section-heading"><div><p className="eyebrow">最近活动</p><h2 id="history-title">导入记录</h2></div></div>
             {overview.recentAttempts.length ? (

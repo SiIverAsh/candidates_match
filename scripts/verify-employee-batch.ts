@@ -72,9 +72,45 @@ assert.equal(afterDelete.employeeCount, 1);
 assert.ok(repository.findEmployeeProfile(second.employee.employeeId, published.version.id));
 assert.equal(repository.findEmployeeProfile(second.employee.employeeId, afterDelete.id), null);
 assert.ok(repository.findEmployeeProfile(first.draft.employee.employeeId, afterDelete.id));
-const empty = employeeDataApplication.deleteEmployees(afterDelete.id, [first.draft.employee.employeeId], actor);
+const empty = employeeDataApplication.deleteEmployees(afterDelete.id, null, actor);
 assert.equal(empty.employeeCount, 0);
 assert.equal(empty.workExperienceCount, 0);
 assert.equal(empty.educationCount, 0);
 assert.equal(candidateIntakeApplication.getReadiness().ready, false);
+const many = repository.publishEmployeeData({
+  employees: Array.from({ length: 601 }, (_, i) => ({ employeeId: `many-${i}`, name: `Person ${i}`, email: "", currentDepartment: "", currentTitle: "" })),
+  workExperiences: [], educationExperiences: [],
+}, actor);
+const afterMany = employeeDataApplication.deleteEmployees(many.id, Array.from({ length: 600 }, (_, i) => `many-${i}`), actor);
+assert.equal(afterMany.employeeCount, 1);
+assert.throws(() => employeeDataApplication.deleteEmployees(many.id, null, actor));
+const afterAll = employeeDataApplication.deleteEmployees(afterMany.id, null, actor);
+assert.equal(afterAll.employeeCount, 0);
+assert.ok(repository.findEmployeeProfile("many-600", afterMany.id));
+const large = repository.publishEmployeeData({
+  employees: Array.from({ length: 10_000 }, (_, i) => ({ employeeId: `large-${i}`, name: `Person ${i}`, email: "", currentDepartment: "", currentTitle: "" })),
+  workExperiences: [], educationExperiences: [],
+}, actor);
+assert.equal(large.employeeCount, 10_000);
+const extended = employeeDataApplication.importResumes([first.draft], actor);
+assert.equal(extended.kind, "published");
+if (extended.kind === "published") assert.equal(extended.version.employeeCount, 10_001);
+
+const { importResumeFiles } = await import("../src/modules/employee-data/application/import-resume-files");
+const files = Array.from({ length: 125 }, (_, i) => new File(["sample"], `${i}.txt`));
+const publishedIds: string[] = [];
+const results = await importResumeFiles(files, {
+  preview: async file => file.name === "10.txt" ? { kind: "rejected", message: "bad file" } : { kind: "parsed", draft: { ...structuredClone(first.draft), employee: { ...first.draft.employee, employeeId: file.name } } },
+  publish: async drafts => {
+    if (drafts.some(draft => draft.employee.employeeId === "20.txt")) return { status: "error", message: "validation", issues: [{ code: "INVALID_VALUE", message: "bad record" }], version: null };
+    publishedIds.push(...drafts.map(draft => draft.employee.employeeId));
+    return { status: "success", message: "ok", issues: [], version: afterAll };
+  },
+  progress: () => {},
+});
+assert.equal(results.imported, 123);
+assert.equal(results.processed, 125);
+assert.equal(results.failures.length, 2);
+assert.equal(new Set(publishedIds).size, 123);
+assert.equal(results.interrupted, null);
 console.log("Employee batch import and deletion verified.");

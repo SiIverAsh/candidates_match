@@ -12,15 +12,12 @@ export const EMPLOYEE_IMPORT_SCHEMA = {
         "current_department",
         "current_title",
       ],
-      maxRows: 10_000,
     },
     WorkExperience: {
       headers: ["employee_id", "company", "title", "start_date", "end_date"],
-      maxRows: 50_000,
     },
     Education: {
       headers: ["employee_id", "school", "major", "start_date", "end_date"],
-      maxRows: 50_000,
     },
   },
 } as const;

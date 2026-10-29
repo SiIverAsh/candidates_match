@@ -503,12 +503,12 @@ export async function handleApi(
 
   if (request.method === "POST" && url.pathname === "/api/admin/employee-data/employees/delete") {
     let json: unknown;
-    try { json = JSON.parse((await readBody(request, 256 * 1024)).toString("utf8")); }
+    try { json = JSON.parse((await readBody(request, 32 * 1024 * 1024)).toString("utf8")); }
     catch (error) { if (error instanceof RequestBodyError) throw error; sendJson(response, 400, { error: "删除请求格式无效。" }); return true; }
     const parsed = deleteEmployeesSchema.safeParse(json);
     if (!parsed.success) { sendJson(response, 400, { error: "请选择有效的员工记录。" }); return true; }
     try {
-      const version = employeeDataApplication.deleteEmployees(parsed.data.versionId, parsed.data.employeeIds, { id: user.id, displayName: user.displayName });
+      const version = employeeDataApplication.deleteEmployees(parsed.data.versionId, "all" in parsed.data ? null : parsed.data.employeeIds, { id: user.id, displayName: user.displayName });
       sendJson(response, 200, { version });
     } catch (error) {
       if (error instanceof EmployeeImportConflict) sendJson(response, 409, { error: error.message });

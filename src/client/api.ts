@@ -90,8 +90,8 @@ export const api = {
     return request(`/api/admin/employee-data/employees?${new URLSearchParams({ page: String(page), search })}`);
   },
 
-  deleteEmployees(versionId: string, employeeIds: string[]): Promise<{ version: EmployeeDataOverview["activeVersion"] }> {
-    return request("/api/admin/employee-data/employees/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId, employeeIds }) });
+  deleteEmployees(versionId: string, employeeIds: string[] | null): Promise<{ version: EmployeeDataOverview["activeVersion"] }> {
+    return request("/api/admin/employee-data/employees/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(employeeIds ? { versionId, employeeIds } : { versionId, all: true }) });
   },
 
   async employeeProfile(employeeId: string, versionId: string): Promise<EmployeeProfile> {

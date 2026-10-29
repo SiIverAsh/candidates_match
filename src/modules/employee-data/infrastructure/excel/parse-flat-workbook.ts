@@ -75,7 +75,6 @@ export function parseFlatEmployeeWorkbook(workbook: Workbook): ImportValidationR
         const existing = drafts.get(identity);
         if (existing) { mergeEmployeeDraft(existing, draft); duplicates++; }
         else drafts.set(identity, draft);
-        if (drafts.size > 10_000) throw new Error("去重后的员工数超过 10,000，请拆分文件。");
       } catch (error) { add({ sheet: sheet.name, row, field: "员工资料", code: "INVALID_ROW", message: error instanceof Error ? error.message : "无法读取该行员工资料。" }); }
     }
   }

@@ -186,14 +186,7 @@ function parseEmployees(
 ): { records: EmployeeRecord[]; sourceRows: Map<string, number> } {
   const records: EmployeeRecord[] = [];
   const sourceRows = new Map<string, number>();
-  const maxRows = EMPLOYEE_IMPORT_SCHEMA.sheets.Employees.maxRows;
-  if (sheet.rowCount - 1 > maxRows) {
-    addIssue(collector, {
-      sheet: "Employees", row: maxRows + 2, field: "记录数", code: "ROW_LIMIT_EXCEEDED",
-      message: `员工记录不能超过 ${maxRows} 行。`,
-    });
-  }
-  for (let row = 2; row <= Math.min(sheet.rowCount, maxRows + 1); row += 1) {
+  for (let row = 2; row <= sheet.rowCount; row += 1) {
     if (isRowEmpty(sheet, row)) continue;
     const employeeId = requiredText(sheet.getCell(row, 1), collector, "Employees", row, "employee_id");
     const name = requiredText(sheet.getCell(row, 2), collector, "Employees", row, "name");
@@ -227,14 +220,7 @@ function parseWorkExperiences(
   collector: IssueCollector,
 ): WorkExperienceRecord[] {
   const records: WorkExperienceRecord[] = [];
-  const maxRows = EMPLOYEE_IMPORT_SCHEMA.sheets.WorkExperience.maxRows;
-  if (sheet.rowCount - 1 > maxRows) {
-    addIssue(collector, {
-      sheet: "WorkExperience", row: maxRows + 2, field: "记录数", code: "ROW_LIMIT_EXCEEDED",
-      message: `工作经历不能超过 ${maxRows} 行。`,
-    });
-  }
-  for (let row = 2; row <= Math.min(sheet.rowCount, maxRows + 1); row += 1) {
+  for (let row = 2; row <= sheet.rowCount; row += 1) {
     if (isRowEmpty(sheet, row)) continue;
     const employeeId = requiredText(sheet.getCell(row, 1), collector, "WorkExperience", row, "employee_id");
     const company = requiredText(sheet.getCell(row, 2), collector, "WorkExperience", row, "company");
@@ -266,14 +252,7 @@ function parseEducation(
   collector: IssueCollector,
 ): EducationRecord[] {
   const records: EducationRecord[] = [];
-  const maxRows = EMPLOYEE_IMPORT_SCHEMA.sheets.Education.maxRows;
-  if (sheet.rowCount - 1 > maxRows) {
-    addIssue(collector, {
-      sheet: "Education", row: maxRows + 2, field: "记录数", code: "ROW_LIMIT_EXCEEDED",
-      message: `教育经历不能超过 ${maxRows} 行。`,
-    });
-  }
-  for (let row = 2; row <= Math.min(sheet.rowCount, maxRows + 1); row += 1) {
+  for (let row = 2; row <= sheet.rowCount; row += 1) {
     if (isRowEmpty(sheet, row)) continue;
     const employeeId = requiredText(sheet.getCell(row, 1), collector, "Education", row, "employee_id");
     const school = requiredText(sheet.getCell(row, 2), collector, "Education", row, "school");

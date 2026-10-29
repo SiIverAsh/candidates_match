@@ -261,7 +261,6 @@ function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boole
     const employeeCount = (active?.employeeCount ?? 0) + data.employees.length;
     const workCount = (active?.workExperienceCount ?? 0) + data.workExperiences.length;
     const educationCount = (active?.educationCount ?? 0) + data.educationExperiences.length;
-    if (append && (employeeCount > 10_000 || workCount > 50_000 || educationCount > 50_000)) throw new EmployeeImportConflict("员工库已达到数据量上限，无法继续追加。");
     database.prepare(`
       INSERT INTO employee_data_versions (
         id, status, imported_at, imported_by_id, imported_by_name,
@@ -340,7 +339,7 @@ function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boole
 
 
 
-export function deleteEmployees(versionId: string, employeeIds: string[], actor: ImportActor): EmployeeDataVersionSummary {
+export function deleteEmployees(versionId: string, employeeIds: string[] | null, actor: ImportActor): EmployeeDataVersionSummary {
   const database = getDatabase();
   const importedAt = new Date().toISOString();
   const id = createVersionId(importedAt);
@@ -348,16 +347,20 @@ export function deleteEmployees(versionId: string, employeeIds: string[], actor:
   try {
     const active = getEmployeeDataOverview().activeVersion;
     if (!active || active.id !== versionId) throw new EmployeeImportConflict("员工库已更新，请刷新列表后重新选择。");
-    const placeholders = employeeIds.map(() => "?").join(", ");
-    const count = database.prepare(`SELECT COUNT(*) AS count FROM employees WHERE version_id = ? AND employee_id IN (${placeholders})`).get(versionId, ...employeeIds) as { count: number };
-    if (count.count !== employeeIds.length) throw new EmployeeImportConflict("部分员工已不存在，请刷新列表后重新选择。");
+    const idsJson = JSON.stringify(employeeIds ?? []);
+    if (employeeIds) {
+      const count = database.prepare("SELECT COUNT(*) AS count FROM employees WHERE version_id = ? AND employee_id IN (SELECT value FROM json_each(?))").get(versionId, idsJson) as { count: number };
+      if (count.count !== employeeIds.length) throw new EmployeeImportConflict("部分员工已不存在，请刷新列表后重新选择。");
+    }
     database.prepare(`INSERT INTO employee_data_versions (id, status, imported_at, imported_by_id, imported_by_name, employee_count, work_experience_count, education_count) VALUES (?, 'ARCHIVED', ?, ?, ?, 0, 0, 0)`).run(id, importedAt, actor.id, actor.displayName);
-    database.prepare(`INSERT INTO employees (version_id, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint)
-      SELECT ?, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint FROM employees WHERE version_id = ? AND employee_id NOT IN (${placeholders})`).run(id, versionId, ...employeeIds);
-    database.prepare(`INSERT INTO work_experiences (version_id, employee_id, company, title, start_date, end_date, current, description)
-      SELECT ?, employee_id, company, title, start_date, end_date, current, description FROM work_experiences WHERE version_id = ? AND employee_id NOT IN (${placeholders})`).run(id, versionId, ...employeeIds);
-    database.prepare(`INSERT INTO education_experiences (version_id, employee_id, school, major, start_date, end_date, current, degree)
-      SELECT ?, employee_id, school, major, start_date, end_date, current, degree FROM education_experiences WHERE version_id = ? AND employee_id NOT IN (${placeholders})`).run(id, versionId, ...employeeIds);
+    if (employeeIds) {
+      database.prepare(`INSERT INTO employees (version_id, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint)
+      SELECT ?, employee_id, name, email, current_department, current_title, profile_url, warnings_json, resume_text, resume_fingerprint FROM employees WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?))`).run(id, versionId, idsJson);
+      database.prepare(`INSERT INTO work_experiences (version_id, employee_id, company, title, start_date, end_date, current, description)
+      SELECT ?, employee_id, company, title, start_date, end_date, current, description FROM work_experiences WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?))`).run(id, versionId, idsJson);
+      database.prepare(`INSERT INTO education_experiences (version_id, employee_id, school, major, start_date, end_date, current, degree)
+      SELECT ?, employee_id, school, major, start_date, end_date, current, degree FROM education_experiences WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?))`).run(id, versionId, idsJson);
+    }
     database.prepare(`UPDATE employee_data_versions SET employee_count = (SELECT COUNT(*) FROM employees WHERE version_id = ?), work_experience_count = (SELECT COUNT(*) FROM work_experiences WHERE version_id = ?), education_count = (SELECT COUNT(*) FROM education_experiences WHERE version_id = ?) WHERE id = ?`).run(id, id, id, id);
     database.prepare("UPDATE employee_data_versions SET status = 'ARCHIVED' WHERE id = ?").run(versionId);
     database.prepare("UPDATE employee_data_versions SET status = 'ACTIVE' WHERE id = ?").run(id);
