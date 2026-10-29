@@ -20,7 +20,7 @@ export function validateEmployeeResume(draft: EmployeeResumeDraft, today: string
   const issues: { sheet: string; row: number; field: string; code: string; message: string }[] = [];
   const add = (sheet: string, row: number, field: string, message: string) => issues.push({ sheet, row, field, code: "INVALID_VALUE", message });
   const text = (sheet: string, row: number, field: string, value: string, required = true) => {
-    if ((required && !value.trim()) || value.length > 300) add(sheet, row, field, "请填写该字段，最多 300 个字符。");
+    if (required && !value.trim()) add(sheet, row, field, "请填写该字段。");
   };
   for (const field of ["employeeId", "name", "email", "currentDepartment", "currentTitle"] as const) text("Employees", 1, field, draft.employee[field], field === "name");
   if (draft.employee.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(draft.employee.email.trim())) add("Employees", 1, "email", "请填写有效的员工工作邮箱，未知可留空。");

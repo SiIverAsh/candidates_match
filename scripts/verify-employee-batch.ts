@@ -87,6 +87,25 @@ assert.throws(() => employeeDataApplication.deleteEmployees(many.id, null, actor
 const afterAll = employeeDataApplication.deleteEmployees(afterMany.id, null, actor);
 assert.equal(afterAll.employeeCount, 0);
 assert.ok(repository.findEmployeeProfile("many-600", afterMany.id));
+const { employeeResumeDraftSchema, deleteEmployeesSchema } = await import("../src/modules/employee-data/presentation/contracts");
+const longDraft = structuredClone(first.draft);
+longDraft.employee.employeeId = `long-${"a".repeat(350)}`;
+longDraft.employee.email = "";
+longDraft.employee.name = "名".repeat(350);
+if (longDraft.workExperiences.length) longDraft.workExperiences[0].company = "公司".repeat(175);
+if (longDraft.educations.length) longDraft.educations[0].school = "学校".repeat(175);
+assert.equal(employeeResumeDraftSchema.safeParse(longDraft).success, true);
+const longPublished = employeeDataApplication.importResumes([longDraft], actor);
+assert.equal(longPublished.kind, "published");
+if (longPublished.kind !== "published") throw new Error("Long fields rejected");
+assert.equal(repository.findEmployeeProfile(longDraft.employee.employeeId, longPublished.version.id)?.name, longDraft.employee.name);
+assert.equal(deleteEmployeesSchema.safeParse({ versionId: longPublished.version.id, employeeIds: [longDraft.employee.employeeId] }).success, true);
+employeeDataApplication.deleteEmployees(longPublished.version.id, [longDraft.employee.employeeId], actor);
+const missing = structuredClone(longDraft);
+missing.employee.name = "";
+const missingResult = employeeDataApplication.importResumes([missing], actor);
+assert.equal(missingResult.kind, "validation_failed");
+if (missingResult.kind === "validation_failed") assert.equal(missingResult.issues.find(issue => issue.field === "name")?.message, "请填写该字段。");
 const large = repository.publishEmployeeData({
   employees: Array.from({ length: 10_000 }, (_, i) => ({ employeeId: `large-${i}`, name: `Person ${i}`, email: "", currentDepartment: "", currentTitle: "" })),
   workExperiences: [], educationExperiences: [],

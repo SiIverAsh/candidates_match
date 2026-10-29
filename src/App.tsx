@@ -60,7 +60,7 @@ export default function App() {
   if (!user) {
     return (
       <LoginPage
-        onAuthenticated={(authenticatedUser) =  > {
+        onAuthenticated={(authenticatedUser) => {
           setUser(authenticatedUser);
           navigate("/candidates/new", true);
         }}

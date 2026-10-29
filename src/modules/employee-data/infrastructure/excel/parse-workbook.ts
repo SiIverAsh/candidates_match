@@ -79,13 +79,6 @@ function requiredText(
     });
     return null;
   }
-  if (value.length > 300) {
-    addIssue(collector, {
-      sheet, row, field, code: "TOO_LONG",
-      message: "字段长度不能超过 300 个字符。",
-    });
-    return null;
-  }
   return value;
 }
 

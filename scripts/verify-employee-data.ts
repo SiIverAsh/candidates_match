@@ -32,6 +32,15 @@ assert.equal(validResult.data.employees.length, 1);
 assert.equal(validResult.data.workExperiences.length, 1);
 assert.equal(validResult.data.educationExperiences.length, 1);
 
+const { readWorkbook } = await import("../src/shared/infrastructure/excel/read-workbook");
+const longWorkbook = await readWorkbook(toArrayBuffer(template));
+longWorkbook.getWorksheet("Employees")!.getCell(2, 2).value = "姓名".repeat(175);
+longWorkbook.getWorksheet("WorkExperience")!.getCell(2, 2).value = "公司".repeat(175);
+const longWorkbookResult = await parseEmployeeWorkbook(toArrayBuffer(await longWorkbook.xlsx.writeBuffer() as unknown as Uint8Array));
+assert.equal(longWorkbookResult.totalIssueCount, 0, JSON.stringify(longWorkbookResult.issues));
+assert.equal(longWorkbookResult.data?.employees[0].name.length, 350);
+assert.equal(longWorkbookResult.data?.workExperiences[0].company.length, 350);
+
 const actor = {
   id: "test-user",
   name: "test",

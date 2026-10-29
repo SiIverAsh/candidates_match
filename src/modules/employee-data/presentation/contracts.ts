@@ -2,7 +2,7 @@ import type { EmployeeDataVersionSummary } from "../domain/models";
 import type { ImportValidationIssue } from "../application/ports";
 import { z } from "zod";
 
-const text = z.string().max(300);
+const text = z.string();
 const dates = { startDate: text, endDate: text.nullable(), current: z.boolean().optional() };
 export const employeeResumeDraftSchema = z.object({
   employee: z.object({ employeeId: text, name: text, email: text, currentDepartment: text, currentTitle: text, profileUrl: z.string().max(2048).optional(), resumeFingerprint: z.string().max(64).nullable().optional(), sourceText: z.string().max(200_000).optional(), warnings: z.array(z.string().max(1000)).max(500).optional() }).strict(),
@@ -13,7 +13,7 @@ export const employeeResumeDraftSchema = z.object({
 
 export const employeeResumesSchema = z.array(employeeResumeDraftSchema).min(1).max(100);
 export const deleteEmployeesSchema = z.union([
-  z.object({ versionId: z.string().min(1).max(100), employeeIds: z.array(z.string().min(1).max(300)).min(1).refine(ids => new Set(ids).size === ids.length) }).strict(),
+  z.object({ versionId: z.string().min(1).max(100), employeeIds: z.array(z.string().min(1)).min(1).refine(ids => new Set(ids).size === ids.length) }).strict(),
   z.object({ versionId: z.string().min(1).max(100), all: z.literal(true) }).strict(),
 ]);
 
