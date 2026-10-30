@@ -12,6 +12,7 @@ export function profileToEmployeeDraft(profile: CandidateProfile, metadata: Part
     employee: { employeeId: "", name: profile.candidateName ?? "", email: "", currentDepartment: "", currentTitle: latest?.rawTitle ?? "", resumeFingerprint: profile.identity?.resumeFingerprint ?? null, ...metadata },
     workExperiences: profile.workExperiences.filter(work => work.company.raw).map(work => ({ company: work.company.raw!, title: work.rawTitle ?? "", startDate: work.dates.start ?? "", endDate: work.dates.end, current: work.dates.current, description: work.description ?? "" })),
     educations: profile.educations.filter(education => education.school.raw).map(education => ({ school: education.school.raw!, major: education.major.raw ?? "", degree: education.degree ?? "", startDate: education.dates.start ?? "", endDate: education.dates.end, current: education.dates.current })),
+    researchExperiences: profile.researchExperiences?.map(({ heading, description }) => ({ heading, description })),
     warnings: [...new Set(warnings)],
   };
 }

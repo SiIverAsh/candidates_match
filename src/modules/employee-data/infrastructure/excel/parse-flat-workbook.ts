@@ -89,5 +89,6 @@ export function parseFlatEmployeeWorkbook(workbook: Workbook): ImportValidationR
     employees: records.map(item => ({ ...item.employee, warnings: item.warnings })),
     workExperiences: records.flatMap(item => item.workExperiences.map(work => ({ ...work, employeeId: item.employee.employeeId }))),
     educationExperiences: records.flatMap(item => item.educations.map(education => ({ ...education, employeeId: item.employee.employeeId }))),
+    researchExperiences: records.flatMap(item => (item.researchExperiences ?? []).map(research => ({ ...research, employeeId: item.employee.employeeId }))),
   }, issues, totalIssueCount, warnings };
 }

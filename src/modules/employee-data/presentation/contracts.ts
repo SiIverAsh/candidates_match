@@ -8,6 +8,7 @@ export const employeeResumeDraftSchema = z.object({
   employee: z.object({ employeeId: text, name: text, email: text, currentDepartment: text, currentTitle: text, profileUrl: z.string().max(2048).optional(), resumeFingerprint: z.string().max(64).nullable().optional(), sourceText: z.string().max(200_000).optional(), warnings: z.array(z.string().max(1000)).max(500).optional() }).strict(),
   workExperiences: z.array(z.object({ company: text, title: text, description: z.string().max(200_000).optional(), ...dates }).strict()).max(100),
   educations: z.array(z.object({ school: text, major: text, degree: text.optional(), ...dates }).strict()).max(100),
+  researchExperiences: z.array(z.object({ heading: text, description: text }).strict()).optional(),
   warnings: z.array(z.string().max(1000)).max(500),
 }).strict();
 

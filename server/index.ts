@@ -11,6 +11,7 @@ const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 const distDirectory = path.join(rootDirectory, "dist");
 const isDevelopment = process.argv.includes("--dev");
 const port = Number(process.env.PORT ?? 3000);
+const host = process.env.CONNECTION_FINDER_HOST ?? "0.0.0.0";
 
 const mimeTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -101,6 +102,6 @@ purgeExpiredCandidateInputs();
 const candidateCleanupTimer = setInterval(purgeExpiredCandidateInputs, 60 * 60 * 1000);
 candidateCleanupTimer.unref();
 
-server.listen(port, "0.0.0.0", () => {
+server.listen(port, host, () => {
   console.log(`Connection Finder running at http://127.0.0.1:${port}`);
 });

@@ -40,6 +40,12 @@ export interface CandidateEducationExperience {
   dates: ExperienceDateRange;
 }
 
+export interface CandidateResearchExperience {
+  sequence: number;
+  heading: string;
+  description: string;
+}
+
 export interface CandidateCompleteness {
   hasName: boolean;
   hasWorkExperience: boolean;
@@ -60,6 +66,7 @@ export interface CandidateProfile {
   warnings: string[];
   workExperiences: CandidateWorkExperience[];
   educations: CandidateEducationExperience[];
+  researchExperiences?: CandidateResearchExperience[];
   researchFunctions?: ResearchFunctionAssessment;
   parserVersion: string;
   normalizerVersion: string;

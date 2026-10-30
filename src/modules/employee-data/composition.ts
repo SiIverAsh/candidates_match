@@ -7,6 +7,7 @@ import type { EmployeeResumeDraft } from "./domain/resume-import";
 import type { ImportActor, EmployeeResumeReader } from "./application/ports";
 import {
   importEmployeeWorkbook,
+  previewEmployeeWorkbook,
   type ImportEmployeeWorkbookCommand,
 } from "./application/import-employee-workbook";
 import { parseEmployeeWorkbook } from "./infrastructure/excel/parse-workbook";
@@ -39,4 +40,5 @@ export const employeeDataApplication = {
       parser: { parse: parseEmployeeWorkbook },
       repository,
     }),
+  previewWorkbook: (file: ImportEmployeeWorkbookCommand["file"]) => previewEmployeeWorkbook(file, { parse: parseEmployeeWorkbook }),
 };

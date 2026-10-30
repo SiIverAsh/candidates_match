@@ -1,9 +1,10 @@
-import type { EmployeeRecord, WorkExperienceRecord, EducationRecord } from "./models";
+import type { EmployeeRecord, WorkExperienceRecord, EducationRecord, ResearchExperienceRecord } from "./models";
 
 export interface EmployeeResumeDraft {
   employee: EmployeeRecord;
   workExperiences: Omit<WorkExperienceRecord, "employeeId">[];
   educations: Omit<EducationRecord, "employeeId">[];
+  researchExperiences?: Omit<ResearchExperienceRecord, "employeeId">[];
   warnings: string[];
 }
 
@@ -30,7 +31,7 @@ export function validateEmployeeResume(draft: EmployeeResumeDraft, today: string
   const date = (sheet: string, row: number, field: string, value: string) => {
     if (!validEmployeeDate(value, field === "endDate" ? "2099-12-31" : today)) add(sheet, row, field, "日期支持 YYYY、YYYY-MM、YYYY-MM-DD；未知请留空，开始日期不可晚于今天。");
   };
-  if (!draft.workExperiences.length && !draft.educations.length) add("经历", 0, "记录", "至少提供一条工作或教育经历。");
+  if (!draft.workExperiences.length && !draft.educations.length && !draft.researchExperiences?.some(item => item.description.trim())) add("经历", 0, "记录", "至少提供一条工作、教育或研究经历。");
   for (const [sheet, records] of [["WorkExperience", draft.workExperiences], ["Education", draft.educations]] as const) {
     for (const [index, record] of records.entries()) {
       if ("company" in record) { text(sheet, index + 1, "company", record.company); text(sheet, index + 1, "title", record.title, false); }

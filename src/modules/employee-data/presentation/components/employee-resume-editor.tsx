@@ -25,6 +25,16 @@ export function EmployeeResumeEditor({ draft, onChange, disabled }: {
       <button className="text-button" type="button" onClick={() => onChange({ ...draft, workExperiences: draft.workExperiences.filter((_, i) => i !== index) })}>移除此工作经历</button>
     </fieldset>)}
     <button className="text-button" type="button" onClick={() => onChange({ ...draft, workExperiences: [...draft.workExperiences, { company: "", title: "", startDate: "", endDate: null, current: false }] })}>添加工作经历</button>
+    <h3>研究经历</h3>
+    {(draft.researchExperiences ?? []).map((research, index) => <fieldset className="employee-import-experience" key={index}>
+      <legend>研究经历 {index + 1}</legend>
+      <div className="employee-import-fields">
+        <label><span>原文标题</span><input type="text" value={research.heading} onChange={event => onChange({ ...draft, researchExperiences: (draft.researchExperiences ?? []).map((item, i) => i === index ? { ...item, heading: event.target.value } : item) })} /></label>
+        <label><span>研究内容</span><textarea rows={8} value={research.description} onChange={event => onChange({ ...draft, researchExperiences: (draft.researchExperiences ?? []).map((item, i) => i === index ? { ...item, description: event.target.value } : item) })} /></label>
+      </div>
+      <button className="text-button" type="button" onClick={() => onChange({ ...draft, researchExperiences: (draft.researchExperiences ?? []).filter((_, i) => i !== index) })}>移除此研究经历</button>
+    </fieldset>)}
+    <button className="text-button" type="button" onClick={() => onChange({ ...draft, researchExperiences: [...(draft.researchExperiences ?? []), { heading: "研究经历", description: "" }] })}>添加研究经历</button>
     <h3>教育经历</h3>
     {draft.educations.map((education, index) => <fieldset className="employee-import-experience" key={index}>
       <legend>教育经历 {index + 1}</legend>

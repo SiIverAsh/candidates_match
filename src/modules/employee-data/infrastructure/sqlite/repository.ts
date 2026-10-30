@@ -74,6 +74,15 @@ function getDatabase(): DatabaseSync {
         FOREIGN KEY (version_id, employee_id)
           REFERENCES employees(version_id, employee_id)
       );
+      CREATE TABLE IF NOT EXISTS research_experiences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version_id TEXT NOT NULL,
+        employee_id TEXT NOT NULL,
+        heading TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (version_id, employee_id)
+          REFERENCES employees(version_id, employee_id)
+      );
       CREATE TABLE IF NOT EXISTS employee_import_attempts (
         id TEXT PRIMARY KEY,
         attempted_at TEXT NOT NULL,
@@ -98,6 +107,7 @@ function getDatabase(): DatabaseSync {
       CREATE INDEX IF NOT EXISTS employees_by_version ON employees(version_id);
       CREATE INDEX IF NOT EXISTS work_experiences_by_employee ON work_experiences(version_id, employee_id);
       CREATE INDEX IF NOT EXISTS education_experiences_by_employee ON education_experiences(version_id, employee_id);
+      CREATE INDEX IF NOT EXISTS research_experiences_by_employee ON research_experiences(version_id, employee_id);
     `);
     const additions = {
       employees: { profile_url: "TEXT NOT NULL DEFAULT ''", warnings_json: "TEXT NOT NULL DEFAULT '[]'", resume_text: "TEXT NOT NULL DEFAULT ''", resume_fingerprint: "TEXT NOT NULL DEFAULT ''" },
@@ -140,10 +150,12 @@ export function findEmployeeProfile(employeeId: string, versionId: string): Empl
   if (!row) return null;
   const workRows = database.prepare("SELECT * FROM work_experiences WHERE version_id = ? AND employee_id = ? ORDER BY start_date DESC, id DESC").all(versionId, employeeId) as Record<string, unknown>[];
   const educationRows = database.prepare("SELECT * FROM education_experiences WHERE version_id = ? AND employee_id = ? ORDER BY start_date DESC, id DESC").all(versionId, employeeId) as Record<string, unknown>[];
+  const researchRows = database.prepare("SELECT * FROM research_experiences WHERE version_id = ? AND employee_id = ? ORDER BY id ASC").all(versionId, employeeId) as Record<string, unknown>[];
   return {
     ...employeeFromRow(row), versionId,
     workExperiences: workRows.map((work) => ({ employeeId, company: String(work.company), title: String(work.title), startDate: String(work.start_date), endDate: work.end_date as string | null, current: work.current === null ? work.end_date === null : Boolean(work.current), description: String(work.description) })),
     educations: educationRows.map((education) => ({ employeeId, school: String(education.school), major: String(education.major), startDate: String(education.start_date), endDate: education.end_date as string | null, current: education.current === null ? education.end_date === null : Boolean(education.current), degree: String(education.degree) })),
+    researchExperiences: researchRows.map(research => ({ employeeId, heading: String(research.heading), description: String(research.description) })),
   };
 }
 
@@ -277,6 +289,8 @@ function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boole
         SELECT ?, employee_id, company, title, start_date, end_date, current, description FROM work_experiences WHERE version_id = ?`).run(id, active.id);
       database.prepare(`INSERT INTO education_experiences (version_id, employee_id, school, major, start_date, end_date, current, degree)
         SELECT ?, employee_id, school, major, start_date, end_date, current, degree FROM education_experiences WHERE version_id = ?`).run(id, active.id);
+      database.prepare(`INSERT INTO research_experiences (version_id, employee_id, heading, description)
+        SELECT ?, employee_id, heading, description FROM research_experiences WHERE version_id = ? ORDER BY id`).run(id, active.id);
     }
     const employeeStatement = database.prepare(`
       INSERT INTO employees (
@@ -310,6 +324,10 @@ function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boole
         id, education.employeeId, education.school, education.major,
         education.startDate, education.endDate, education.current === undefined ? null : Number(education.current), education.degree ?? "",
       );
+    }
+    const researchStatement = database.prepare("INSERT INTO research_experiences (version_id, employee_id, heading, description) VALUES (?, ?, ?, ?)");
+    for (const research of data.researchExperiences ?? []) {
+      researchStatement.run(id, research.employeeId, research.heading, research.description);
     }
     database.prepare(
       "UPDATE employee_data_versions SET status = 'ARCHIVED' WHERE status = 'ACTIVE'",
@@ -360,6 +378,8 @@ export function deleteEmployees(versionId: string, employeeIds: string[] | null,
       SELECT ?, employee_id, company, title, start_date, end_date, current, description FROM work_experiences WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?))`).run(id, versionId, idsJson);
       database.prepare(`INSERT INTO education_experiences (version_id, employee_id, school, major, start_date, end_date, current, degree)
       SELECT ?, employee_id, school, major, start_date, end_date, current, degree FROM education_experiences WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?))`).run(id, versionId, idsJson);
+      database.prepare(`INSERT INTO research_experiences (version_id, employee_id, heading, description)
+      SELECT ?, employee_id, heading, description FROM research_experiences WHERE version_id = ? AND employee_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id`).run(id, versionId, idsJson);
     }
     database.prepare(`UPDATE employee_data_versions SET employee_count = (SELECT COUNT(*) FROM employees WHERE version_id = ?), work_experience_count = (SELECT COUNT(*) FROM work_experiences WHERE version_id = ?), education_count = (SELECT COUNT(*) FROM education_experiences WHERE version_id = ?) WHERE id = ?`).run(id, id, id, id);
     database.prepare("UPDATE employee_data_versions SET status = 'ARCHIVED' WHERE id = ?").run(versionId);

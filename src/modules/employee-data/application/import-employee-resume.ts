@@ -24,6 +24,7 @@ export function importEmployeeResumes(drafts: EmployeeResumeDraft[], actor: Impo
       employees,
       workExperiences: drafts.flatMap((draft, index) => draft.workExperiences.map(item => ({ ...item, company: item.company.trim(), title: item.title.trim(), employeeId: employees[index].employeeId }))),
       educationExperiences: drafts.flatMap((draft, index) => draft.educations.map(item => ({ ...item, school: item.school.trim(), major: item.major.trim(), employeeId: employees[index].employeeId }))),
+      researchExperiences: drafts.flatMap((draft, index) => (draft.researchExperiences ?? []).map(item => ({ ...item, employeeId: employees[index].employeeId }))),
     }, actor) };
   } catch (error) {
     const conflict = error instanceof EmployeeImportConflict;

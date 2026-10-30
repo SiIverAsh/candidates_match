@@ -1,6 +1,7 @@
 import ExcelJS, { type Cell, type Worksheet } from "exceljs";
 import { readWorkbook } from "../../../../shared/infrastructure/excel/read-workbook";
 import { parseFlatEmployeeWorkbook } from "./parse-flat-workbook";
+import { isStandardizedEmployeeWorkbook, parseStandardizedEmployeeWorkbook } from "./parse-standardized-workbook";
 
 import {
   EMPLOYEE_IMPORT_SCHEMA,
@@ -287,7 +288,8 @@ export async function parseEmployeeWorkbook(bytes: ArrayBuffer): Promise<ImportV
     return { data: null, issues: collector.issues, totalIssueCount: collector.total };
   }
 
-  if (!EMPLOYEE_IMPORT_SHEET_NAMES.some(name => workbook.getWorksheet(name)?.getCell(1, 1).text === "employee_id")) return parseFlatEmployeeWorkbook(workbook);
+  if (isStandardizedEmployeeWorkbook(workbook)) return parseStandardizedEmployeeWorkbook(workbook);
+  if (!EMPLOYEE_IMPORT_SHEET_NAMES.some(name => workbook.getWorksheet(name)?.getCell(1, 1).text === "employee_id")) return { ...parseFlatEmployeeWorkbook(workbook), format: "flat" };
 
   for (const worksheet of workbook.worksheets) {
     if (!EMPLOYEE_IMPORT_SHEET_NAMES.includes(worksheet.name as EmployeeImportSheetName)) {
@@ -311,7 +313,7 @@ export async function parseEmployeeWorkbook(bytes: ArrayBuffer): Promise<ImportV
     }
   }
   if (sheets.size !== EMPLOYEE_IMPORT_SHEET_NAMES.length) {
-    return { data: null, issues: collector.issues, totalIssueCount: collector.total };
+    return { data: null, issues: collector.issues, totalIssueCount: collector.total, format: "legacy" };
   }
 
   const employeeResult = parseEmployees(sheets.get("Employees")!, collector);
@@ -348,6 +350,7 @@ export async function parseEmployeeWorkbook(bytes: ArrayBuffer): Promise<ImportV
       : null,
     issues: collector.issues,
     totalIssueCount: collector.total,
+    format: "legacy",
   };
 }
 

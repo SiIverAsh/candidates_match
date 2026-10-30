@@ -46,6 +46,13 @@ export interface ImportValidationResult {
   issues: ImportValidationIssue[];
   totalIssueCount: number;
   warnings?: string[];
+  format?: "standardized" | "flat" | "legacy";
+  summary?: {
+    totalEmployees: number;
+    workExperienceCount: number;
+    educationCount: number;
+    researchCount: number;
+  };
 }
 
 export interface EmployeeWorkbookParser {

@@ -30,6 +30,15 @@ export function CandidateProfilePreview({ profile }: { profile: CandidateProfile
                   )) : <p className="empty-copy">未识别到工作经历。</p>}
                 </div>
                 <div className="profile-section">
+                  <h3>研究经历 · {profile.researchExperiences?.length ?? 0}</h3>
+                  {profile.researchExperiences?.length ? profile.researchExperiences.map((item) => (
+                    <article className="experience-card" key={`research-${item.sequence}`}>
+                      <strong>{item.heading}</strong>
+                      <p style={{ whiteSpace: "pre-wrap" }}>{item.description}</p>
+                    </article>
+                  )) : <p className="empty-copy">未识别到独立研究经历章节。</p>}
+                </div>
+                <div className="profile-section">
                   <h3>教育经历 · {profile.educations.length}</h3>
                   {profile.educations.length ? profile.educations.map((item) => (
                     <article className="experience-card" key={`education-${item.sequence}`}>

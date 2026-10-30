@@ -15,4 +15,8 @@ export function mergeEmployeeDraft(target: EmployeeResumeDraft, source: Employee
   target.warnings = [...new Set([...target.warnings, ...source.warnings])];
   mergeUnique(target.workExperiences, source.workExperiences);
   mergeUnique(target.educations, source.educations);
+  if (source.researchExperiences?.length) {
+    target.researchExperiences ??= [];
+    mergeUnique(target.researchExperiences, source.researchExperiences);
+  }
 }

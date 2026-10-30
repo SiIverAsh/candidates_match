@@ -30,10 +30,17 @@ export interface EducationRecord {
   degree?: string;
 }
 
+export interface ResearchExperienceRecord {
+  employeeId: string;
+  heading: string;
+  description: string;
+}
+
 export interface ParsedEmployeeData {
   employees: EmployeeRecord[];
   workExperiences: WorkExperienceRecord[];
   educationExperiences: EducationRecord[];
+  researchExperiences?: ResearchExperienceRecord[];
 }
 
 export interface EmployeeDataVersionSummary {
@@ -64,6 +71,7 @@ export interface EmployeeProfile extends EmployeeRecord {
   versionId: string;
   workExperiences: WorkExperienceRecord[];
   educations: EducationRecord[];
+  researchExperiences?: ResearchExperienceRecord[];
 }
 
 export interface EmployeeDirectoryPage {

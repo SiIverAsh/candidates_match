@@ -137,7 +137,7 @@ export function EmployeeDataPage({
               <article><strong>WorkExperience</strong><code>employee_id · company · title · start_date · end_date</code></article>
               <article><strong>Education</strong><code>employee_id · school · major · start_date · end_date</code></article>
             </div>
-            <p className="schema-note">上方为可选的原三表模板，继续沿用严格校验。中文名单和单份简历至少有一条可识别的工作或教育经历；日期保留原有年份、月份或日精度，未知结束时间不视为至今。</p>
+            <p className="schema-note">上方为可选的原三表模板，继续沿用严格校验。简历资料至少有一条可识别的工作、教育或非空研究经历。研究经历单独保留章节标题和正文；日期保留原有年份、月份或日精度，未知结束时间不视为至今。</p>
           </section>
         </div>
       </div>

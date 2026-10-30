@@ -8,6 +8,7 @@ import type { EmployeeDataOverview } from "@/modules/employee-data/domain/models
 import type { EmployeeDirectoryPage, EmployeeProfile } from "@/modules/employee-data/domain/models";
 import type { EmployeeResumeDraft } from "@/modules/employee-data/domain/resume-import";
 import type { ImportActionState } from "@/modules/employee-data/presentation/contracts";
+import type { EmployeeWorkbookPreview } from "@/modules/employee-data/application/import-employee-workbook";
 import type { RunMatchingResult } from "@/modules/matching/application/run-matching";
 import type { MatchRun } from "@/modules/matching/domain/models";
 import type { ParseCandidateQueryResult } from "@/modules/resume-parser/application/parse-candidate-query";
@@ -132,6 +133,12 @@ export const api = {
       method: "POST",
       body: form,
     });
+  },
+
+  previewEmployeeWorkbook(file: File): Promise<EmployeeWorkbookPreview> {
+    const form = new FormData();
+    form.set("employeeFile", file);
+    return request("/api/admin/employee-data/workbook-preview", { method: "POST", body: form });
   },
 
   previewEmployeeResume(file: File): Promise<{ kind: "parsed"; draft: EmployeeResumeDraft } | { kind: "rejected"; message: string }> {

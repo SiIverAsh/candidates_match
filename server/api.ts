@@ -535,7 +535,7 @@ export async function handleApi(
     return true;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/admin/employee-data") {
+  if (request.method === "POST" && (url.pathname === "/api/admin/employee-data" || url.pathname === "/api/admin/employee-data/workbook-preview")) {
     const body = await readBody(request);
     const requestBody = body.buffer.slice(
       body.byteOffset,
@@ -551,6 +551,10 @@ export async function handleApi(
     const file = upload && typeof upload === "object" && "arrayBuffer" in upload
       ? upload as File
       : null;
+    if (url.pathname === "/api/admin/employee-data/workbook-preview") {
+      sendJson(response, 200, await employeeDataApplication.previewWorkbook(file));
+      return true;
+    }
     const result = await employeeDataApplication.importWorkbook({
       actor: { id: user.id, displayName: user.displayName },
       file: file

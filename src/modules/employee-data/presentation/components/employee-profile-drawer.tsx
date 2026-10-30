@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Briefcase, GraduationCap, X } from "lucide-react";
+import { Briefcase, FlaskConical, GraduationCap, X } from "lucide-react";
 import { api } from "@/client/api";
 import type { EmployeeProfile, EmployeeRecord } from "../../domain/models";
 
@@ -60,6 +60,15 @@ export function EmployeeProfileDrawer({ employee, versionId, onClose }: {
                   {work.description ? <details><summary>工作内容</summary><p style={{ whiteSpace: "pre-wrap" }}>{work.description}</p></details> : null}
                 </article>
               )) : <p className="empty-copy">暂无工作经历。</p>}
+            </section>
+            <section className="employee-history" aria-label="研究经历">
+              <h3><FlaskConical size={16} />研究经历 <span>{profile.researchExperiences?.length ?? 0}</span></h3>
+              {profile.researchExperiences?.length ? profile.researchExperiences.map((research, index) => (
+                <article className="experience-card" key={`research-${index}`}>
+                  <strong>{research.heading}</strong>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{research.description}</p>
+                </article>
+              )) : <p className="empty-copy">暂无研究经历。</p>}
             </section>
             <section className="employee-history" aria-label="教育经历">
               <h3><GraduationCap size={16} />教育经历 <span>{profile.educations.length}</span></h3>

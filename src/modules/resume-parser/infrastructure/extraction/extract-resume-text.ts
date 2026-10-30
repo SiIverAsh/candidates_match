@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { dirname, join, sep } from "node:path";
-import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, InvalidPDFException, OPS, PasswordException } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractMsgAttachment } from "../../../../shared/infrastructure/word/extract-msg-attachment";
 import { extractDocText } from "../../../../shared/infrastructure/word/extract-doc-text";
 import { extractDocxText } from "../../../../shared/infrastructure/word/extract-docx-text";
@@ -29,10 +29,10 @@ async function extractPdf(bytes: Uint8Array, warnings: string[]): Promise<string
     standardFontDataUrl: join(PDF_RESOURCES, "standard_fonts") + sep,
     wasmUrl: join(PDF_RESOURCES, "wasm") + sep,
   });
-  const pdf = await loadingTask.promise;
   const pages: string[] = [];
   const visualPages: number[] = [];
   try {
+    const pdf = await loadingTask.promise;
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
@@ -135,6 +135,26 @@ export async function extractResumeText(source: ResumeSource): Promise<TextExtra
     if (error instanceof Error && ["TEXT_LAYER_MISSING", "IMAGE_ONLY"].includes(error.message)) {
       return { ok: false, code: error.message, message: "该资料只有图片或轮廓，没有可读取的文字层。请提供带可选择文字的 PDF、Word 或粘贴简历文本。" };
     }
+    if (error instanceof PasswordException) {
+      return { ok: false, code: "PDF_PASSWORD_REQUIRED", message: "PDF 需要打开密码，请解除密码保护或提供未加密版本后重新导入。" };
+    }
+    if (error instanceof InvalidPDFException) {
+      return { ok: false, code: "PDF_INVALID_STRUCTURE", message: "PDF 内部结构不完整或无法解析，请用 PDF 阅读器打开并另存后重试。" };
+    }
+    if (error instanceof Error && ["PPTX_SLIDES_MISSING", "PPTX_SLIDE_RELATIONSHIP_INVALID"].includes(error.message)) {
+      return { ok: false, code: "PPTX_INVALID_STRUCTURE", message: "PPTX 的幻灯片结构不完整，请用 PowerPoint 或 WPS 打开并另存后重试。" };
+    }
+    if (error instanceof Error && error.message === "DOCX_MAIN_DOCUMENT_MISSING") {
+      return { ok: false, code: "DOCX_INVALID_STRUCTURE", message: "DOCX 缺少文档正文，请用 Word 或 WPS 打开并另存后重试。" };
+    }
+    if (error instanceof Error && error.message === "SOURCE_BYTES_MISSING") {
+      return { ok: false, code: "SOURCE_BYTES_MISSING", message: "没有读取到文件内容，请重新选择文件后重试。" };
+    }
+    // Error messages from document parsers may include private text or paths.
+    // Record only fixed, allow-listed diagnostic values, never the exception.
+    const format = ["pdf", "doc", "docx", "txt", "html", "pptx", "msg"].includes(source.sourceFormat) ? source.sourceFormat : "other";
+    const kind = error instanceof TypeError ? "TYPE_ERROR" : error instanceof RangeError ? "RANGE_ERROR" : "OTHER_ERROR";
+    console.error("Resume text extraction failed", { format, kind });
     return { ok: false, code: "SOURCE_UNREADABLE", message: "简历正文读取失败，请更换文件或粘贴文本后重试。" };
   }
 }

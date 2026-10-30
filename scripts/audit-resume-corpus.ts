@@ -77,8 +77,8 @@ if (process.argv.includes("--worker")) {
   }
   const files = (await list(directory)).sort();
   const counts: Record<string, number> = {};
-  const fieldCounts = { name: 0, work: 0, education: 0, both: 0 };
-  const recordCounts = { work: 0, education: 0, completeWorkFields: 0, completeEducationFields: 0 };
+  const fieldCounts = { name: 0, work: 0, education: 0, research: 0, both: 0 };
+  const recordCounts = { work: 0, education: 0, research: 0, completeWorkFields: 0, completeEducationFields: 0 };
   const byExtension: Record<string, Record<string, number>> = {};
   const validationIssues: Record<string, number> = {};
   const extractionWarnings: Record<string, number> = {};
@@ -124,6 +124,9 @@ if (process.argv.includes("--worker")) {
         if (!education.dates.end && !education.dates.current) missingFields.educationEnd++;
       }
       const c = result.profile?.completeness;
+      const research = result.profile?.researchExperiences ?? [];
+      recordCounts.research += research.length;
+      if (research.length) fieldCounts.research++;
       if (c?.hasName) fieldCounts.name++;
       if (c?.hasWorkExperience) fieldCounts.work++;
       if (c?.hasEducation) fieldCounts.education++;

@@ -8,11 +8,13 @@ import { EmployeeResumeEditor } from "./employee-resume-editor";
 import { MAX_EMPLOYEE_IMPORT_BYTES } from "../../domain/policies";
 import { importResumeFiles, type ResumeFileBatchResult } from "../../application/import-resume-files";
 import { CANDIDATE_INTAKE_POLICY } from "@/modules/candidate-intake/domain/policies";
+import type { EmployeeWorkbookPreview } from "../../application/import-employee-workbook";
 
 export function EmployeeImportForm({ onImported }: { onImported: () => Promise<void> }) {
   const [state, setState] = useState<ImportActionState>(INITIAL_IMPORT_STATE);
   const [pending, setPending] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [workbookPreview, setWorkbookPreview] = useState<EmployeeWorkbookPreview | null>(null);
   const [drafts, setDrafts] = useState<{ name: string; draft: EmployeeResumeDraft | null; error?: string }[]>([]);
   const [batch, setBatch] = useState<ResumeFileBatchResult | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -34,7 +36,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
   async function importAutomatically(files: File[]) {
     if (busy.current) return;
     if (!files.length) { showError("所选文件夹中没有文件。"); return; }
-    busy.current = true; setPending(true); setFile(null); setDrafts([]); setState(INITIAL_IMPORT_STATE); setBatch(null);
+    busy.current = true; setPending(true); setFile(null); setWorkbookPreview(null); setDrafts([]); setState(INITIAL_IMPORT_STATE); setBatch(null);
     try {
       const result = await importResumeFiles(files, { preview: api.previewEmployeeResume, publish: api.importEmployeeResumes, progress: setBatch });
       if (result.imported || result.interrupted) await onImported();
@@ -43,12 +45,23 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
 
   async function receiveFiles(files: File[]) {
     if (busy.current || !files.length) return;
+    setFile(null); setWorkbookPreview(null); setDrafts([]); setBatch(null); setState(INITIAL_IMPORT_STATE);
     const kinds = files.map(item => importFileKind(item.name));
     if (files.length > 1) { await importAutomatically(files); return; }
     if (!kinds[0]) { showError("支持 PDF、Word、TXT、HTML、PPTX、MSG 简历，或 .xlsx 员工表格。"); return; }
     if (files.some((item, index) => !item.size || item.size > (kinds[index] === "workbook" ? MAX_EMPLOYEE_IMPORT_BYTES : CANDIDATE_INTAKE_POLICY.maxFileBytes))) { showError("文件不能为空；简历最大 50 MB，Excel 最大 10 MB。"); return; }
     setBatch(null); setFile(files[0]); setDrafts([]); setState(INITIAL_IMPORT_STATE);
-    if (kinds[0] === "workbook") return;
+    if (kinds[0] === "workbook") {
+      busy.current = true; setPending(true);
+      try {
+        const preview = await api.previewEmployeeWorkbook(files[0]);
+        setWorkbookPreview(preview);
+        if (!preview.canImport) setState({ ...INITIAL_IMPORT_STATE, status: "error", message: "Excel 校验未通过，整批尚不能发布。请按表名、行号和字段修正后重新选择文件。", issues: preview.issues, totalIssueCount: preview.totalIssueCount });
+      } catch (error) {
+        showError(error instanceof ApiError && error.status === 413 ? "Excel 内容超过大小限制，请拆分文件。" : "Excel 预览失败，请重新选择文件或稍后重试。");
+      } finally { busy.current = false; setPending(false); }
+      return;
+    }
     busy.current = true; setPending(true);
     const results: { name: string; draft: EmployeeResumeDraft | null; error?: string }[] = [];
     try {
@@ -64,13 +77,13 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy.current || !file || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))) return;
+    if (busy.current || !file || (workbook && !workbookPreview?.canImport) || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))) return;
     busy.current = true;
     setPending(true);
     try {
       const result = workbook ? await api.importEmployees(file) : await api.importEmployeeResumes(drafts.map(item => item.draft!));
       setState(result);
-      if (result.status === "success") { setFile(null); setDrafts([]); await onImported(); }
+      if (result.status === "success") { setFile(null); setWorkbookPreview(null); setDrafts([]); await onImported(); }
     } catch (error) {
       setState({
         status: "error",
@@ -104,19 +117,31 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           onDrop={event => { event.preventDefault(); dragDepth.current = 0; setDragging(false); void receiveFiles(Array.from(event.dataTransfer.files)); }}>
           <strong>{dragging ? "松开文件，自动识别简历或 Excel" : "拖入员工简历或 Excel，也可点击选择"}</strong>
           <span>PDF、Word、TXT、HTML、PPTX、MSG 简历每份最大 50 MB；.xlsx 表格最大 10 MB。</span>
-          <span>单份简历解析后可核对；多份简历将自动解析并导入。Excel 表格全部校验通过后生效。</span>
+          <span>单份简历解析后可核对；多份简历将自动解析并导入。Excel 先预览校验，全部通过后确认发布。</span>
           <input className="sr-only" id="employeeFile" name="employeeFile" type="file" multiple accept={[...RESUME_FILE_EXTENSIONS.map(extension => `.${extension}`), ".xlsx"].join(",")} disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
         </label>
         <label className="secondary-link" htmlFor="employeeFolder">选择文件夹并自动导入简历</label>
         <input className="sr-only" id="employeeFolder" type="file" multiple disabled={pending} ref={element => element?.setAttribute("webkitdirectory", "")} onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void importAutomatically(files); }} />
         {batch ? <section aria-live="polite"><p>{batch.interrupted ? "处理已中断" : pending ? "正在处理" : "处理完成"}：已检查 {batch.checked} / {batch.total} 份，已导入 {batch.imported} 份，失败 {batch.failures.length} 份。</p>{batch.interrupted ? <p role="alert">{batch.interrupted}</p> : null}{batch.failures.length ? <details><summary>查看未导入文件及原因</summary><ul>{batch.failures.map((item, index) => <li key={`${index}:${item.name}`}>{item.name}：{item.message}</li>)}</ul></details> : null}</section> : null}
         {file && workbook ? <p role="status">已选择：{file.name} · 多人 Excel</p> : null}
+        {workbookPreview ? <section className="import-result" aria-label="Excel 导入预览">
+          <h3>Excel 导入预览</h3>
+          <p>{workbookPreview.format === "standardized" ? "已识别标准化分表，按记录 ID 关联经历。" : workbookPreview.format === "legacy" ? "已识别三表模板。" : workbookPreview.format === "flat" ? "已识别中文员工名单。" : "尚未识别工作簿格式。"}</p>
+          <dl className="result-metrics">
+            <div><dt>来源记录</dt><dd>{workbookPreview.totalEmployees ?? "未统计"}</dd></div>
+            <div><dt>工作经历行</dt><dd>{workbookPreview.workExperienceCount ?? "未统计"}</dd></div>
+            <div><dt>教育经历行</dt><dd>{workbookPreview.educationCount ?? "未统计"}</dd></div>
+            <div><dt>研究章节</dt><dd>{workbookPreview.researchCount ?? "未统计"}</dd></div>
+          </dl>
+          <p>{workbookPreview.canImport ? "校验通过。确认发布后，整版数据将替代当前活动员工库，旧版本保留。" : "以上是已读取的候选记录数，整批校验尚未通过，不会发布。"}</p>
+          {workbookPreview.warnings.length ? <ul>{workbookPreview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul> : null}
+        </section> : null}
         {drafts.map((item, index) => <section key={`${index}:${item.name}`}>
           <p><strong>简历 {index + 1}：{item.name}</strong> <button className="text-button" type="button" disabled={pending} onClick={() => setDrafts(current => current.filter((_, i) => i !== index))}>移除</button></p>
           {item.draft ? <EmployeeResumeEditor draft={item.draft} onChange={draft => setDrafts(current => current.map((entry, i) => i === index ? { ...entry, draft } : entry))} disabled={pending} /> : <p role="alert">{item.error}</p>}
         </section>)}
-        <button className="primary-button" disabled={pending || !file || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))} type="submit">
-          {pending ? "正在处理…" : workbook ? "校验并发布多人数据" : "确认并加入员工库"}
+        <button className="primary-button" disabled={pending || !file || (Boolean(workbook) && !workbookPreview?.canImport) || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))} type="submit">
+          {pending ? "正在处理…" : workbook ? "确认发布新员工库版本" : "确认并加入员工库"}
         </button>
       </form>
       <p className="schema-note">简历导入会加入现有员工库，不覆盖已有员工。批量导入按文件处理，解析或校验失败的文件会列出原因。Excel 请提供完整员工名单：发布后整体替代当前匹配数据；旧版本保留供复核。</p>

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import JSZip from "jszip";
 import { extractDocText } from "../src/shared/infrastructure/word/extract-doc-text";
 import { extractDocxText, wordXmlText } from "../src/shared/infrastructure/word/extract-docx-text";
 import { extractHtmlDocument } from "../src/shared/infrastructure/word/html-text";
 import { prepareResumeFile } from "../src/modules/candidate-intake/infrastructure/file/prepare-resume-file";
 import { extractResumeText, hasInsufficientTextLayer } from "../src/modules/resume-parser/infrastructure/extraction/extract-resume-text";
+import { employeeResumeReader } from "../src/modules/employee-data/infrastructure/resume/read-resume";
 import { renderPositionedText, type PositionedText } from "../src/modules/resume-parser/infrastructure/extraction/positioned-text";
 import { extractEmfText } from "../src/modules/resume-parser/infrastructure/extraction/metafile-text";
 import { extractPresentationText } from "../src/modules/resume-parser/infrastructure/extraction/extract-presentation-text";
@@ -84,4 +86,31 @@ slides.file("ppt/presentation.xml", '<p:presentation><p:sldIdLst><p:sldId id="1"
 assert.equal((await extractPresentationText(await slides.generateAsync({type:"uint8array"}))).trim(), "First", "不应读取未被演示文稿引用的遗留幻灯片");
 slides.file("ppt/presentation.xml", '<p:presentation><p:sldIdLst><p:sldId id="3" r:id="missing"/></p:sldIdLst></p:presentation>');
 await assert.rejects(extractPresentationText(await slides.generateAsync({type:"uint8array"})), /PPTX_SLIDE_RELATIONSHIP_INVALID/u);
+const brokenPresentation = await extractResumeText({ ...imageOnlySource, sourceFormat: "pptx", bytes: await slides.generateAsync({type:"uint8array"}) });
+assert.equal(brokenPresentation.ok, false);
+if (!brokenPresentation.ok) assert.equal(brokenPresentation.code, "PPTX_INVALID_STRUCTURE");
+const brokenPdf = await extractResumeText({ ...imageOnlySource, sourceFormat: "pdf", bytes: new TextEncoder().encode("%PDF-1.4\n%%EOF") });
+assert.equal(brokenPdf.ok, false);
+if (!brokenPdf.ok) assert.equal(brokenPdf.code, "PDF_INVALID_STRUCTURE");
+// This encrypted file was generated from a synthetic one-line document; the
+// fixture needs no local OCR, office application or operating-system tool.
+const encryptedPdf = await readFile(new URL("./fixtures/encrypted-resume-synthetic.pdf", import.meta.url));
+const protectedDocument = await extractResumeText({ ...imageOnlySource, sourceFormat: "pdf", bytes: encryptedPdf });
+assert.equal(protectedDocument.ok, false);
+if (!protectedDocument.ok) assert.equal(protectedDocument.code, "PDF_PASSWORD_REQUIRED");
+const preview = await employeeResumeReader.read({ name: "protected.pdf", type: "application/pdf", size: encryptedPdf.byteLength, arrayBuffer: async () => Uint8Array.from(encryptedPdf).buffer });
+assert.equal(preview.kind, "rejected");
+if (preview.kind === "rejected") assert.match(preview.message, /需要打开密码/u);
+const originalError = console.error;
+const diagnostics: unknown[][] = [];
+try {
+  console.error = (...values: unknown[]) => { diagnostics.push(values); };
+  const syntheticPrivateText = "private-test-value-should-not-be-logged";
+  const failed = await extractResumeText({ ...imageOnlySource, sourceFormat: "docx", bytes: new TextEncoder().encode(syntheticPrivateText) });
+  assert.equal(failed.ok, false);
+  if (!failed.ok) assert.equal(failed.code, "SOURCE_UNREADABLE");
+  assert.equal(diagnostics.length, 1);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /private-test-value-should-not-be-logged/u);
+  assert.deepEqual(diagnostics[0][1], { format: "docx", kind: "OTHER_ERROR" });
+} finally { console.error = originalError; }
 console.log("Document extraction verification passed (synthetic fixtures only)");

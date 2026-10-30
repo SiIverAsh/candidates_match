@@ -4,9 +4,11 @@ import { createHash } from "node:crypto";
 import { chineseEducationMajor, hasEmploymentRole, inferEducationAt } from "../../domain/infer-education";
 import { inferLayoutWorkAt } from "../../domain/infer-layout-work";
 import { educationDegree, englishEducationMajor, englishSectionRole, hasEnglishDegree, hasEnglishEmploymentRole, inferEnglishEducationAt, inferEnglishWorkAt, isCredentialLine } from "../../domain/english-experiences";
-import { cleanResumeLine, EDUCATION_SECTION, EXPERIENCE_DESCRIPTION, FUNDING_SECTION, MIXED_EXPERIENCE_SECTION, OTHER_SECTION, WORK_SECTION, isResumeSection } from "../../domain/resume-sections";
+import { ADDITIONAL_SECTION, cleanResumeLine, EDUCATION_SECTION, EXPERIENCE_DESCRIPTION, FUNDING_SECTION, MIXED_EXPERIENCE_SECTION, OTHER_SECTION, RESEARCH_SECTION, WORK_SECTION, isResumeSection } from "../../domain/resume-sections";
 import { withoutMentorAnnotations } from "../../domain/experience-text";
 import { normalizeResumeText } from "../../domain/normalize-resume-text";
+import { extractResearchSections } from "../../domain/research-sections";
+import { inferColumnEducation } from "../../domain/column-education";
 import type {
   CandidateEducationExperience,
   CandidateProfile,
@@ -21,7 +23,7 @@ import {
   normalizeSchool,
 } from "../../domain/normalization";
 
-export const PARSER_VERSION = "resume-heuristic-v16";
+export const PARSER_VERSION = "resume-heuristic-v20";
 
 interface WorkDraft { company: string | null; title: string | null; dates: string | null; description: string[] }
 interface EducationDraft { school: string | null; major: string | null; dates: string | null; degree?: string | null }
@@ -114,6 +116,8 @@ export function parseResumeText(
   parsedAt: string,
 ): CandidateProfile {
   const normalizedText = normalizeResumeText(text);
+  const extractedResearch = extractResearchSections(text);
+  const { researchExperiences } = extractedResearch;
   let candidateName: string | null = inferResumeName(normalizedText);
   let section: Section = null;
   // Keep explicit headings separate from classifications inferred from individual rows.
@@ -135,10 +139,20 @@ export function parseResumeText(
     currentEducation = EMPTY_EDUCATION();
   };
 
-  const sourceLines = resumeLines(normalizedText);
+  const sourceLines = resumeLines(normalizeResumeText(extractedResearch.remainingText));
   for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
     let line = sourceLines[lineIndex];
     if (!line) continue;
+
+    if (RESEARCH_SECTION.test(line)) {
+      flushWork();
+      flushEducation();
+      section = "other";
+      explicitSection = "other";
+      explicitWorkRole = undefined;
+      researchOnlySection = false;
+      continue;
+    }
 
     const name = valueAfterLabel(line, "姓名|候选人|name|full name|candidate name");
     if (name) { candidateName = cleanResumeName(name); continue; }
@@ -189,7 +203,7 @@ export function parseResumeText(
       continue;
     }
     if (section === "education" && isCredentialLine(line)) continue;
-    if (OTHER_SECTION.test(line) || FUNDING_SECTION.test(line)) {
+    if (OTHER_SECTION.test(line) || FUNDING_SECTION.test(line) || ADDITIONAL_SECTION.test(line)) {
       flushWork();
       flushEducation();
       section = "other";
@@ -271,6 +285,14 @@ export function parseResumeText(
     }
 
     const nearbyLines = [line, ...sourceLines.slice(lineIndex + 1, lineIndex + 4)];
+    const columnEducation = explicitSection === "education" ? inferColumnEducation(line) : null;
+    if (columnEducation) {
+      flushWork();
+      flushEducation();
+      section = "education";
+      currentEducation = columnEducation;
+      continue;
+    }
     const inferredEducation = explicitSection === "work" || researchOnlySection ? null
       : inferEnglishEducationAt(nearbyLines, 0) ?? inferEducationAt(nearbyLines, 0);
     const englishWorkWithoutDegree = section === "work" && inferredEducation && /^[A-Za-z]/u.test(inferredEducation.school) && !nearbyLines.some(hasEnglishDegree);
@@ -419,7 +441,7 @@ export function parseResumeText(
   if (hasMissingDates) warnings.push("部分经历缺少可识别的起止时间，后续时间重叠判断可能不完整。");
   if (unresolvedExperienceRows) warnings.push(`有 ${unresolvedExperienceRows} 行含起止时间的经历未能可靠识别，请对照原文核对。`);
 
-  const parseStatus = !hasWorkExperience && !hasEducation
+  const parseStatus = !hasWorkExperience && !hasEducation && !researchExperiences.length
     ? "INSUFFICIENT"
     : Boolean(candidateName) && hasWorkExperience && hasEducation && !hasIncompleteWorkFields &&
         !hasIncompleteEducationFields && !hasMissingDates && !unresolvedExperienceRows
@@ -437,6 +459,7 @@ export function parseResumeText(
     warnings,
     workExperiences,
     educations,
+    researchExperiences,
     parserVersion: PARSER_VERSION,
     normalizerVersion: NORMALIZER_VERSION,
     parsedAt,
@@ -467,6 +490,7 @@ export function failedCandidateProfile(
     warnings: [warning],
     workExperiences: [],
     educations: [],
+    researchExperiences: [],
     parserVersion: PARSER_VERSION,
     normalizerVersion: NORMALIZER_VERSION,
     parsedAt,
