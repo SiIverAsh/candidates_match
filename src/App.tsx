@@ -10,7 +10,6 @@ import { CandidateLibraryPage } from "@/modules/candidate-intake/presentation/pa
 import { CandidateDetailPage } from "@/modules/candidate-intake/presentation/pages/candidate-detail-page";
 import { EmployeeDataPage } from "@/modules/employee-data/presentation/pages/employee-data-page";
 import { ResultsPage } from "@/modules/results/presentation/pages/results-page";
-import { AiAssistant } from "@/modules/enterprise-ai/presentation/ai-assistant";
 
 function navigate(path: string, replace = false): void {
   if (replace) window.history.replaceState({}, "", path);
@@ -109,5 +108,5 @@ export default function App() {
       ? <CandidateIntakePage user={user} onLogout={logout} />
       : <ForbiddenPage />;
   }
-  return <>{renderAuthenticatedPage(user)}<AiAssistant key={user.id} /></>;
+  return renderAuthenticatedPage(user);
 }

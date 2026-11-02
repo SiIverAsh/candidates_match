@@ -13,6 +13,7 @@ import type { ResumeSource } from "../../domain/models";
 
 const MAX_EXTRACTED_CHARACTERS = 200_000;
 const PDF_RESOURCES = dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+const pdfResourceDir = (sub: string): string => `${join(PDF_RESOURCES, sub).replaceAll("\\", "/")}/`;
 
 export function hasInsufficientTextLayer(text: string, hasLargeImage: boolean): boolean {
   const compact = text.replace(/\s/gu, "");
@@ -24,10 +25,10 @@ async function extractPdf(bytes: Uint8Array, warnings: string[]): Promise<string
   const loadingTask = getDocument({
     data: Uint8Array.from(bytes),
     useSystemFonts: false,
-    cMapUrl: join(PDF_RESOURCES, "cmaps") + sep,
+    cMapUrl: pdfResourceDir("cmaps"),
     cMapPacked: true,
-    standardFontDataUrl: join(PDF_RESOURCES, "standard_fonts") + sep,
-    wasmUrl: join(PDF_RESOURCES, "wasm") + sep,
+    standardFontDataUrl: pdfResourceDir("standard_fonts"),
+    wasmUrl: pdfResourceDir("wasm"),
   });
   const pages: string[] = [];
   const visualPages: number[] = [];
