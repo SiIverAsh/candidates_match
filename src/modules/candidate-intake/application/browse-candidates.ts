@@ -6,6 +6,7 @@ export interface CandidateListInput {
   search?: string;
   resultsOnly?: boolean;
   matchCategory?: string;
+  reviewStatus?: string;
   filters?: CandidateColumnFilters;
 }
 
@@ -31,7 +32,7 @@ export function listCandidates(
     ...input.filters,
     name: input.filters?.name?.trim().slice(0, 100) || undefined,
     submittedBy: input.filters?.submittedBy?.trim().slice(0, 100) || undefined,
-  });
+  }, input.reviewStatus === "PENDING" || input.reviewStatus === "REVIEWED" ? input.reviewStatus : undefined);
 }
 
 export function getCandidateQuery(queryId: string, requestedBy: string, repository: CandidateLibraryRepository, now: string) {

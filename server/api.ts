@@ -28,7 +28,7 @@ import { BATCH_LIMITS, BatchInputError } from "../src/modules/candidate-batch/do
 import type { BatchCommand } from "../src/modules/candidate-batch/application/process-batch";
 import { CANDIDATE_WORKBOOK_LIMITS } from "../src/modules/candidate-batch/domain/workbook";
 import { MAX_RESUME_FILE_BYTES } from "../src/shared/domain/import-file";
-import { candidateColumnFiltersSchema } from "../src/modules/candidate-intake/presentation/contracts";
+import { candidateColumnFiltersSchema, candidateReviewSchema } from "../src/modules/candidate-intake/presentation/contracts";
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const maxRequestBytes = 12 * 1024 * 1024;
@@ -92,12 +92,19 @@ function importState(result: ImportEmployeeWorkbookResult): ImportActionState {
   if (result.kind === "published") {
     return {
       status: "success",
-      message: "导入成功，新数据版本已原子发布。",
-      issues: [],
-      totalIssueCount: 0,
+      message: result.importMode === "append" ? `已新增 ${result.importedCount ?? 0} 名员工，跳过 ${result.skippedCount ?? 0} 名；现有员工已保留。` : "导入成功，新数据版本已原子发布。",
+      issues: result.issues ?? [],
+      totalIssueCount: result.totalIssueCount ?? 0,
       version: result.version,
       warnings: result.warnings,
+      importedCount: result.importedCount,
+      skippedCount: result.skippedCount,
+      totalCount: result.totalCount,
+      importMode: result.importMode,
     };
+  }
+  if (result.kind === "nothing_imported") {
+    return { status: "error", message: "没有可新增的员工，已存在或冲突记录已跳过，现有员工库保持不变。", issues: result.issues, totalIssueCount: result.totalIssueCount, version: null, warnings: result.warnings, importedCount: 0, skippedCount: result.skippedCount, totalCount: result.totalCount, importMode: result.importMode };
   }
   if (result.kind === "validation_failed") {
     return {
@@ -327,10 +334,15 @@ export async function handleApi(
     catch { sendJson(response, 400, { error: "列筛选条件无效，请清除筛选后重试。" }); return true; }
     const parsedFilters = candidateColumnFiltersSchema.safeParse(columnFilters);
     if (!parsedFilters.success) { sendJson(response, 400, { error: "列筛选条件无效，请检查选项和日期范围。" }); return true; }
+    const reviewStatus = url.searchParams.get("reviewStatus") ?? undefined;
+    if (reviewStatus !== undefined && reviewStatus !== "PENDING" && reviewStatus !== "REVIEWED") {
+      sendJson(response, 400, { error: "复核状态无效。" }); return true;
+    }
     sendJson(response, 200, await candidateIntakeApplication.browse(user.id, {
       page: Number(url.searchParams.get("page") ?? 1), search: url.searchParams.get("search") ?? "",
       resultsOnly: url.searchParams.get("resultsOnly") === "1",
       matchCategory: url.searchParams.get("matchCategory") ?? undefined,
+      reviewStatus,
       filters: parsedFilters.data,
     }));
     return true;
@@ -348,8 +360,25 @@ export async function handleApi(
     const run = query ? matchingApplication.getRun(queryId, user.id) : null;
     if (run) auditApplication.record({ actorId: user.id, actionType: "MATCH_RESULT_ACCESSED", resourceRef: queryId, outcome: "FOUND" });
     sendJson(response, query ? 200 : 404, query ? {
-      query, profile, run,
+      query, profile, run, review: candidateIntakeApplication.getReview(queryId),
     } : { error: "NOT_FOUND" });
+    return true;
+  }
+
+  const candidateReviewRoute = url.pathname.match(/^\/api\/candidate-intake\/queries\/([^/]+)\/review$/u);
+  if (request.method === "POST" && candidateReviewRoute) {
+    if (!hasPermission(user, "candidate:query")) {
+      sendJson(response, 403, { error: "FORBIDDEN" }); return true;
+    }
+    let body: unknown;
+    try { body = JSON.parse((await readBody(request)).toString("utf8")); }
+    catch { sendJson(response, 400, { error: "复核请求无效。" }); return true; }
+    const parsed = candidateReviewSchema.safeParse(body);
+    if (!parsed.success) { sendJson(response, 400, { error: "复核请求无效。" }); return true; }
+    const result = candidateIntakeApplication.review(decodeURIComponent(candidateReviewRoute[1]), parsed.data.runId, parsed.data.status, { id: user.id, displayName: user.displayName });
+    if (result.kind === "not_found") sendJson(response, 404, { error: "NOT_FOUND" });
+    else if (result.kind === "conflict") sendJson(response, 409, { error: "匹配结果已变化，请刷新资料后重新复核。" });
+    else sendJson(response, 200, { review: result.review });
     return true;
   }
 

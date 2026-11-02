@@ -39,6 +39,7 @@ export interface ImportValidationIssue {
   field: string;
   code: string;
   message: string;
+  employeeId?: string;
 }
 
 export interface ImportValidationResult {
@@ -47,6 +48,7 @@ export interface ImportValidationResult {
   totalIssueCount: number;
   warnings?: string[];
   format?: "standardized" | "flat" | "legacy";
+  selection?: { totalEmployees: number; eligibleEmployees: number; failedEmployees: number; fatal: boolean };
   summary?: {
     totalEmployees: number;
     workExperienceCount: number;

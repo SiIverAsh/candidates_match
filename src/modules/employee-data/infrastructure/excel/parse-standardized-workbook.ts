@@ -46,9 +46,14 @@ export function isStandardizedEmployeeWorkbook(workbook: Workbook): boolean {
 export function parseStandardizedEmployeeWorkbook(workbook: Workbook): ImportValidationResult {
   const issues: ImportValidationIssue[] = [];
   let totalIssueCount = 0;
+  let activeEmployeeId: string | undefined;
+  let fatal = false;
+  const failedIds = new Set<string>();
   const add = (sheet: string, row: number, field: string, code: string, message: string) => {
     totalIssueCount++;
-    if (issues.length < 200) issues.push({ sheet, row, field, code, message });
+    if (activeEmployeeId) failedIds.add(activeEmployeeId);
+    else fatal = true;
+    if (issues.length < 200) issues.push({ sheet, row, field, code, message, ...(activeEmployeeId ? { employeeId: activeEmployeeId } : {}) });
   };
   const dataRows = new Map<string, LocatedRow[]>();
   for (const sheet of workbook.worksheets) {
@@ -94,24 +99,29 @@ export function parseStandardizedEmployeeWorkbook(workbook: Workbook): ImportVal
     if (!workbook.getWorksheet("研究经历")) add("研究经历", 1, "工作表", "MISSING_SHEET", "该解析器版本支持研究经历，缺少研究经历表。");
   }
   const summary = { totalEmployees: dataRows.get("人员")?.length ?? 0, workExperienceCount: dataRows.get("工作经历")?.length ?? 0, educationCount: dataRows.get("教育经历")?.length ?? 0, researchCount: dataRows.get("研究经历")?.length ?? 0 };
-  if (totalIssueCount) return { data: null, issues, totalIssueCount, format: "standardized", summary };
+  if (fatal) return { data: null, issues, totalIssueCount, format: "standardized", summary, selection: { totalEmployees: summary.totalEmployees, eligibleEmployees: 0, failedEmployees: 0, fatal: true } };
 
   const people = new Map<string, Pending>();
   for (const row of dataRows.get("人员") ?? []) {
+    activeEmployeeId = undefined;
     const v = row.values, id = v["记录ID"].trim();
     if (!id) { add(row.sheet, row.row, "记录ID", "REQUIRED", "记录ID不能为空。"); continue; }
     if (people.has(id)) { add(row.sheet, row.row, "记录ID", "DUPLICATE_EMPLOYEE_ID", "记录ID重复，请逐条核对。"); continue; }
     const employee = { employeeId: id, name: v["姓名"].trim(), email: (v["邮箱"] ?? "").trim(), currentDepartment: (v["当前部门"] ?? "").trim(), currentTitle: (v["当前职位候选"] ?? "").trim(), profileUrl: (v["个人主页"] ?? "").trim() };
     const warnings = [v["解析提示"], v["复核状态"] ? `复核状态：${v["复核状态"]}` : ""].filter(Boolean);
     people.set(id, { draft: { employee, workExperiences: [], educations: [], researchExperiences: [], warnings }, person: row, work: [], education: [], research: [], attachments: [] });
+    activeEmployeeId = id;
     if (!["valid", "invalid"].includes(v["文件状态"].trim())) add(row.sheet, row.row, "文件状态", "SOURCE_NOT_READ", "源文件尚未完整读取，请先核对并补充。");
   }
+  activeEmployeeId = undefined;
   if (!people.size) add("人员", 2, "记录ID", "NO_EMPLOYEES", "至少需要一条员工记录。");
   const sequences = new Set<string>();
   for (const sheet of ["工作经历", "教育经历", "研究经历", "需处理", "原文段落"]) {
     for (const row of dataRows.get(sheet) ?? []) {
+      activeEmployeeId = undefined;
       const id = row.values["记录ID"]?.trim() ?? "", pending = people.get(id);
       if (!pending) { add(sheet, row.row, "记录ID", id ? "UNKNOWN_EMPLOYEE_ID" : "REQUIRED", "记录ID为空或不在人员表中。"); continue; }
+      activeEmployeeId = id;
       if (sheet === "需处理" || sheet === "原文段落") { pending.attachments.push(row); continue; }
       const seqField = sheet === "研究经历" ? "章节序号" : "经历序号";
       const seq = row.values[seqField].trim();
@@ -153,6 +163,7 @@ export function parseStandardizedEmployeeWorkbook(workbook: Workbook): ImportVal
   };
   for (const pending of people.values()) {
     const { draft } = pending;
+    activeEmployeeId = draft.employee.employeeId;
     for (const [field, sheet, actual] of [["工作中间记录数", "工作经历", pending.work.length], ["教育中间记录数", "教育经历", pending.education.length], ["研究章节数", "研究经历", pending.research.length]] as const) {
       if (!(field in pending.person.values)) continue;
       const expected = pending.person.values[field].trim();
@@ -185,7 +196,6 @@ export function parseStandardizedEmployeeWorkbook(workbook: Workbook): ImportVal
     draft.employee.sourceText = JSON.stringify({ format: "standardized-workbook", rows: meta });
   }
   const groups = [...people.values()];
-  const values = groups.map(x => x.draft);
   for (const [field, column, key] of [["email", "邮箱", (p: Pending) => p.draft.employee.email.toLowerCase()], ["profileUrl", "个人主页", (p: Pending) => p.draft.employee.profileUrl ?? ""]] as const) {
     const identities = new Map<string, Pending[]>();
     for (const pending of groups) {
@@ -193,14 +203,17 @@ export function parseStandardizedEmployeeWorkbook(workbook: Workbook): ImportVal
       if (value) identities.set(value, [...(identities.get(value) ?? []), pending]);
     }
     for (const group of identities.values()) if (group.length > 1) for (const pending of group) {
+      activeEmployeeId = pending.draft.employee.employeeId;
       pending.draft.warnings.push(`${column}与其他记录重复，记录未自动合并。`);
       add("人员", pending.person.row, column, field === "email" ? "DUPLICATE_EMAIL" : "DUPLICATE_PROFILE_URL", `${column}与其他记录重复，请逐条核对。`);
     }
   }
-  return { data: totalIssueCount ? null : {
+  const values = groups.filter(x => !failedIds.has(x.draft.employee.employeeId)).map(x => x.draft);
+  const selection = { totalEmployees: summary.totalEmployees, eligibleEmployees: fatal ? 0 : values.length, failedEmployees: failedIds.size, fatal };
+  return { data: fatal || !values.length ? null : {
     employees: values.map(x => ({ ...x.employee, warnings: x.warnings })),
     workExperiences: values.flatMap(x => x.workExperiences.map(w => ({ ...w, employeeId: x.employee.employeeId }))),
     educationExperiences: values.flatMap(x => x.educations.map(e => ({ ...e, employeeId: x.employee.employeeId }))),
     researchExperiences: values.flatMap(x => (x.researchExperiences ?? []).map(r => ({ ...r, employeeId: x.employee.employeeId }))),
-  }, issues, totalIssueCount, format: "standardized", summary, warnings: ["标准化数据来自自动提取，请逐项对照原件复核。"] };
+  }, issues, totalIssueCount, format: "standardized", summary, selection, warnings: ["标准化数据来自自动提取，请逐项对照原件复核。"] };
 }

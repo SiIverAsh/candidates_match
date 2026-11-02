@@ -59,10 +59,29 @@ const tests: Array<[string, (book: ExcelJS.Workbook) => void, string, string, nu
 ];
 for (const [label, mutate, code, sheet, row] of tests) {
   const book = fixture(); mutate(book); const result = await parse(book);
-  assert.equal(result.data, null, label);
+  const fatal = ["formula", "orphan", "duplicate person", "research version without sheet or count"].includes(label);
+  assert.equal(result.selection?.fatal, fatal, label);
+  if (fatal || label === "duplicate email") assert.equal(result.data, null, label);
+  else {
+    assert.equal(result.selection?.eligibleEmployees, 1, label);
+    assert.equal(result.selection?.failedEmployees, 1, label);
+    const failed = result.issues.find(issue => issue.code === code)?.employeeId;
+    assert.ok(failed, label);
+    assert.ok(result.data!.employees.every(employee => employee.employeeId !== failed), label);
+    assert.ok(result.data!.workExperiences.every(experience => experience.employeeId !== failed), label);
+    assert.ok(result.data!.educationExperiences.every(experience => experience.employeeId !== failed), label);
+    assert.ok(result.data!.researchExperiences!.every(experience => experience.employeeId !== failed), label);
+  }
   assert.ok(result.issues.some(issue => issue.code === code && issue.sheet === sheet && issue.row === row), label);
   assert.ok(result.summary && result.summary.totalEmployees === 2, label);
 }
+const many = fixture();
+for (let i = 0; i < 210; i++) many.getWorksheet("人员")!.addRow([`bad-${i}`, "未复核", "unreadable", "", "", "", "", "", `bad-${i}.pdf`, ""]);
+const partial = await parse(many);
+assert.ok(partial.totalIssueCount > 200);
+assert.equal(partial.issues.length, 200);
+assert.deepEqual(partial.selection, { totalEmployees: 212, eligibleEmployees: 2, failedEmployees: 210, fatal: false });
+assert.deepEqual(partial.data!.employees.map(employee => employee.employeeId), ["a", "b"]);
 const chunks = fixture();
 chunks.getWorksheet("研究经历")!.getCell("D2").value = "完整值见原文段落：研究经历/研究正文，来源序号 0";
 chunks.getWorksheet("原文段落")!.addRows([["a", "超长字段", 1, "第一段\n", "研究经历", "研究正文", 0], ["a", "超长字段", 2, "第二段", "研究经历", "研究正文", 0]]);

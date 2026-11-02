@@ -56,7 +56,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
       try {
         const preview = await api.previewEmployeeWorkbook(files[0]);
         setWorkbookPreview(preview);
-        if (!preview.canImport) setState({ ...INITIAL_IMPORT_STATE, status: "error", message: "Excel 校验未通过，整批尚不能发布。请按表名、行号和字段修正后重新选择文件。", issues: preview.issues, totalIssueCount: preview.totalIssueCount });
+        if (preview.totalIssueCount || !preview.canImport) setState({ ...INITIAL_IMPORT_STATE, status: "error", message: preview.importMode === "append" && preview.canImport ? `可先导入 ${preview.eligibleEmployees ?? 0} 名员工，${preview.failedEmployees ?? 0} 名将跳过。以下问题不阻止其余员工导入。` : preview.importMode === "append" ? "目前没有可导入的员工。请核对以下问题，已存在的记录无需重复导入。" : "Excel 校验未通过，请按表名、行号和字段修正后重新选择文件。", issues: preview.issues, totalIssueCount: preview.totalIssueCount });
       } catch (error) {
         showError(error instanceof ApiError && error.status === 413 ? "Excel 内容超过大小限制，请拆分文件。" : "Excel 预览失败，请重新选择文件或稍后重试。");
       } finally { busy.current = false; setPending(false); }
@@ -117,7 +117,7 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           onDrop={event => { event.preventDefault(); dragDepth.current = 0; setDragging(false); void receiveFiles(Array.from(event.dataTransfer.files)); }}>
           <strong>{dragging ? "松开文件，自动识别简历或 Excel" : "拖入员工简历或 Excel，也可点击选择"}</strong>
           <span>PDF、Word、TXT、HTML、PPTX、MSG 简历每份最大 50 MB；.xlsx 表格最大 10 MB。</span>
-          <span>单份简历解析后可核对；多份简历将自动解析并导入。Excel 先预览校验，全部通过后确认发布。</span>
+          <span>单份简历解析后可核对；多份简历将自动解析并导入。标准化 Excel 可先导入通过的员工，其余保留原因。</span>
           <input className="sr-only" id="employeeFile" name="employeeFile" type="file" multiple accept={[...RESUME_FILE_EXTENSIONS.map(extension => `.${extension}`), ".xlsx"].join(",")} disabled={pending} onChange={event => { void receiveFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
         </label>
         <label className="secondary-link" htmlFor="employeeFolder">选择文件夹并自动导入简历</label>
@@ -129,11 +129,15 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           <p>{workbookPreview.format === "standardized" ? "已识别标准化分表，按记录 ID 关联经历。" : workbookPreview.format === "legacy" ? "已识别三表模板。" : workbookPreview.format === "flat" ? "已识别中文员工名单。" : "尚未识别工作簿格式。"}</p>
           <dl className="result-metrics">
             <div><dt>来源记录</dt><dd>{workbookPreview.totalEmployees ?? "未统计"}</dd></div>
+            {workbookPreview.importMode === "append" ? <>
+              <div><dt>可导入员工</dt><dd>{workbookPreview.eligibleEmployees ?? "未统计"}</dd></div>
+              <div><dt>跳过员工</dt><dd>{workbookPreview.failedEmployees ?? "未统计"}</dd></div>
+            </> : null}
             <div><dt>工作经历行</dt><dd>{workbookPreview.workExperienceCount ?? "未统计"}</dd></div>
             <div><dt>教育经历行</dt><dd>{workbookPreview.educationCount ?? "未统计"}</dd></div>
             <div><dt>研究章节</dt><dd>{workbookPreview.researchCount ?? "未统计"}</dd></div>
           </dl>
-          <p>{workbookPreview.canImport ? "校验通过。确认发布后，整版数据将替代当前活动员工库，旧版本保留。" : "以上是已读取的候选记录数，整批校验尚未通过，不会发布。"}</p>
+          <p>{workbookPreview.importMode === "append" ? workbookPreview.canImport ? "点击下方“导入通过的员工”后，合格员工将加入现有员工库；未通过或已存在的员工会跳过。同一员工的经历一起处理。" : "目前没有可新增的员工，或工作簿结构需要修正。现有员工库保持不变。" : workbookPreview.canImport ? "校验通过。确认发布后，整版数据将替代当前活动员工库，旧版本保留。" : "以上是已读取的候选记录数，整批校验尚未通过，不会发布。"}</p>
           {workbookPreview.warnings.length ? <ul>{workbookPreview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul> : null}
         </section> : null}
         {drafts.map((item, index) => <section key={`${index}:${item.name}`}>
@@ -141,10 +145,10 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           {item.draft ? <EmployeeResumeEditor draft={item.draft} onChange={draft => setDrafts(current => current.map((entry, i) => i === index ? { ...entry, draft } : entry))} disabled={pending} /> : <p role="alert">{item.error}</p>}
         </section>)}
         <button className="primary-button" disabled={pending || !file || (Boolean(workbook) && !workbookPreview?.canImport) || (!workbook && (!drafts.length || drafts.some(item => !item.draft)))} type="submit">
-          {pending ? "正在处理…" : workbook ? "确认发布新员工库版本" : "确认并加入员工库"}
+          {pending ? "正在处理…" : workbook ? workbookPreview?.importMode === "append" ? "导入通过的员工" : "确认发布新员工库版本" : "确认并加入员工库"}
         </button>
       </form>
-      <p className="schema-note">简历导入会加入现有员工库，不覆盖已有员工。批量导入按文件处理，解析或校验失败的文件会列出原因。Excel 请提供完整员工名单：发布后整体替代当前匹配数据；旧版本保留供复核。</p>
+      <p className="schema-note">简历和标准化 Excel 导入会加入现有员工库，不覆盖已有员工；失败或冲突记录会列出原因。普通中文 Excel 名单与原三表模板仍按整版发布，替代当前匹配数据，旧版本保留供复核。</p>
       {state.status !== "idle" ? (
         <section
           className={`import-result import-result-${state.status}`}
@@ -152,9 +156,10 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
           aria-labelledby="import-result-title"
         >
           <div>
-            <p className="eyebrow">导入结果</p>
+            <p className="eyebrow">{file && workbookPreview ? "校验结果" : "导入结果"}</p>
             <h3 id="import-result-title">{state.message}</h3>
           </div>
+          {state.importedCount !== undefined ? <p>本次新增 {state.importedCount} 名员工，跳过 {state.skippedCount ?? 0} 名。</p> : null}
           {state.version ? (
             <dl className="result-metrics">
               <div><dt>版本号</dt><dd>{state.version.id}</dd></div>
@@ -173,12 +178,13 @@ export function EmployeeImportForm({ onImported }: { onImported: () => Promise<v
                   : ""}
               </p>
               <table className="data-table error-table">
-                <thead><tr><th>工作表</th><th>行</th><th>字段</th><th>修正建议</th></tr></thead>
+                <thead><tr><th>工作表</th><th>行</th><th>记录 ID</th><th>字段</th><th>修正建议</th></tr></thead>
                 <tbody>
                   {state.issues.map((issue, index) => (
                     <tr key={`${issue.sheet}-${issue.row}-${issue.field}-${issue.code}-${index}`}>
                       <td>{issue.sheet}</td>
                       <td>{issue.row || "—"}</td>
+                      <td><code>{issue.employeeId ?? "—"}</code></td>
                       <td><code>{issue.field}</code></td>
                       <td>{issue.message}</td>
                     </tr>

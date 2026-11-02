@@ -6,11 +6,12 @@ import { groupMatchResults } from "@/modules/results/domain/group-results";
 import { ConfidenceGroup } from "@/modules/results/presentation/components/confidence-group";
 import { CandidateProfilePreview } from "./candidate-profile-preview";
 import { ResearchFunctionSummary } from "@/modules/research-functions/presentation/research-function-summary";
+import { CandidateReviewPanel } from "./candidate-review-panel";
 
 const TABS = ["matching", "functions", "profile"] as const;
 type DrawerTab = (typeof TABS)[number];
 
-export function CandidateDetailDrawer({ queryId, onClose, initialTab = "matching" }: { queryId: string; onClose: () => void; initialTab?: DrawerTab }) {
+export function CandidateDetailDrawer({ queryId, onClose, initialTab = "matching", onReviewChange }: { queryId: string; onClose: () => void; initialTab?: DrawerTab; onReviewChange?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [detail, setDetail] = useState<CandidateDetail | null>(null);
@@ -77,6 +78,7 @@ export function CandidateDetailDrawer({ queryId, onClose, initialTab = "matching
             <span><Building2 size={14} />{profile?.workExperiences[0]?.company.raw ?? "公司未识别"}</span>
             <span><GraduationCap size={14} />{profile?.educations[0]?.school.raw ?? "学校未识别"}</span>
           </section>
+          <CandidateReviewPanel detail={detail} onChange={value => { setDetail(value); onReviewChange?.(); }} />
           {profile?.warnings.length ? <section className="parse-warning" role="status"><strong>解析提示 · 匹配结果可能不完整</strong><ul>{profile.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></section> : null}
           <section id="drawer-matching" role="tabpanel" aria-labelledby="matching-tab" hidden={tab !== "matching"}>
             <div className="ats-info-banner"><Network size={17} /><div><strong>{detail.run ? `已找到 ${detail.run.resultCount} 位可能认识候选人的内部同事` : "尚未生成匹配结果"}</strong><p>推荐基于共同经历推断，不代表双方确定认识。优先查看高置信度结果的具体依据。</p></div></div>

@@ -55,3 +55,8 @@ next-env.d.ts
 
 # Local resume corpus; contains personal data.
 /profile/
+
+# Local repaired employee workbook; contains personal data.
+/员工标准化_修正版_20261030.xlsx
+
+./keywords

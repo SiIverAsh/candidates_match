@@ -7,6 +7,7 @@ import { candidateSearchFields } from "../../domain/search-fields";
 import { candidateDateBounds, type CandidateColumnFilters } from "../../domain/column-filters";
 import { possibleFunctionFilterValues, summarizePossibleFunctions } from "../../domain/possible-functions";
 import type { ResearchFunctionAssessment } from "../../../research-functions/domain/models";
+import { assessCandidateReview, type CandidateReview, type CandidateReviewDecision, type CandidateReviewFilter, type ReviewMatchRun } from "../../domain/manual-review";
 
 import type { CandidateActor } from "../../application/ports";
 import type { CandidateMatchCategory, CandidateQuery, CandidateQueryPage, CandidateQuerySummary, CandidateSourcePayload } from "../../domain/models";
@@ -29,6 +30,10 @@ function getDatabase(): DatabaseSync {
     const functionSummary = (value: unknown) => summarizePossibleFunctions(value === null ? null : JSON.parse(String(value)) as ResearchFunctionAssessment);
     database.function("candidate_function_summary", { deterministic: true }, value => JSON.stringify(functionSummary(value)));
     database.function("candidate_function_filter_values", { deterministic: true }, value => JSON.stringify(possibleFunctionFilterValues(functionSummary(value))));
+    database.function("candidate_review_summary", { deterministic: true }, (runId, status, count, decision) => JSON.stringify(assessCandidateReview(
+      runId === null ? null : { id: String(runId), status: status as ReviewMatchRun["status"], resultCount: Number(count) },
+      decision === null ? null : JSON.parse(String(decision)) as CandidateReviewDecision,
+    )));
     database.exec(`
       CREATE TABLE IF NOT EXISTS audit_events (
         id TEXT PRIMARY KEY,
@@ -68,6 +73,12 @@ function getDatabase(): DatabaseSync {
     if (!columns.some(column => column.name === "submitted_by_name")) {
       database.exec("ALTER TABLE candidate_queries ADD COLUMN submitted_by_name TEXT");
     }
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS candidate_reviews (
+        query_id TEXT PRIMARY KEY REFERENCES candidate_queries(id) ON DELETE CASCADE,
+        decision_json TEXT NOT NULL
+      );
+    `);
     globalForCandidateIntake.candidateIntakeDatabase = database;
   }
   return globalForCandidateIntake.candidateIntakeDatabase;
@@ -217,7 +228,7 @@ export function findCandidateQuery(queryId: string, _requestedBy: string, now: s
   return row ? queryFromRow(row) : null;
 }
 
-export function listCandidateQueries(_requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory, filters: CandidateColumnFilters = {}): CandidateQueryPage {
+export function listCandidateQueries(_requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory, filters: CandidateColumnFilters = {}, reviewStatus?: CandidateReviewFilter): CandidateQueryPage {
   const database = getDatabase();
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
   const hasProfiles = tables.has("candidate_profiles");
@@ -227,7 +238,10 @@ export function listCandidateQueries(_requestedBy: string, now: string, page: nu
   const joins = [
     hasProfiles ? "LEFT JOIN candidate_profiles p ON p.query_id = q.id AND p.submitted_by = q.submitted_by AND p.expires_at > ?" : "",
     hasRuns ? "LEFT JOIN match_runs m ON m.query_id = q.id AND m.submitted_by = q.submitted_by AND m.expires_at > ?" : "",
+    "LEFT JOIN candidate_reviews r ON r.query_id = q.id",
   ].join(" ");
+  const reviewSummary = `candidate_review_summary(${hasRuns ? "m.id, m.status, m.result_count" : "NULL, NULL, NULL"}, r.decision_json)`;
+  const reviewState = `json_extract(${reviewSummary}, '$.status')`;
   const searchWhere = search ? ` AND text_search_matches(?, q.id, q.content_text, candidate_search_fields(${hasProfiles ? "p.profile_json" : "NULL"}))` : "";
   const available = hasRuns ? "m.id IS NOT NULL AND m.status = 'COMPLETED' AND m.result_count > 0" : "0";
   const unavailable = hasRuns ? `m.id IS NOT NULL AND NOT (${available})` : "0";
@@ -266,28 +280,73 @@ export function listCandidateQueries(_requestedBy: string, now: string, page: nu
   }
   const baseWhere = `q.expires_at > ?${searchWhere}${columnWhere.length ? ` AND ${columnWhere.join(" AND ")}` : ""}`;
   const categoryWhere = matchCategory === "FOUND" ? available : matchCategory === "NOT_FOUND" ? unavailable : hasRuns ? "m.id IS NOT NULL" : "0";
-  const where = `${baseWhere}${resultsOnly ? ` AND (${categoryWhere})` : ""}`;
+  const where = `${baseWhere}${resultsOnly ? ` AND (${categoryWhere})` : ""}${reviewStatus ? ` AND ${reviewState} = ?` : ""}`;
   const params = [...(hasProfiles ? [now] : []), ...(hasRuns ? [now] : []), now, ...(search ? [search] : []), ...columnParams];
   const count = database.prepare(`SELECT COUNT(*) AS total,
     COALESCE(SUM(CASE WHEN ${available} THEN 1 ELSE 0 END), 0) AS found,
-    COALESCE(SUM(CASE WHEN ${unavailable} THEN 1 ELSE 0 END), 0) AS not_found
-    FROM candidate_queries q ${joins} WHERE ${baseWhere}`).get(...params) as { total: number; found: number; not_found: number };
+    COALESCE(SUM(CASE WHEN ${unavailable} THEN 1 ELSE 0 END), 0) AS not_found,
+    COALESCE(SUM(CASE WHEN ${reviewState} = 'PENDING' THEN 1 ELSE 0 END), 0) AS pending,
+    COALESCE(SUM(CASE WHEN ${reviewState} = 'REVIEWED' THEN 1 ELSE 0 END), 0) AS reviewed
+    FROM candidate_queries q ${joins} WHERE ${baseWhere}`).get(...params) as { total: number; found: number; not_found: number; pending: number; reviewed: number };
   const resultCounts = { found: Number(count.found), notFound: Number(count.not_found) };
-  const total = resultsOnly ? matchCategory === "FOUND" ? resultCounts.found : matchCategory === "NOT_FOUND" ? resultCounts.notFound : resultCounts.found + resultCounts.notFound : Number(count.total);
+  const reviewCounts = { pending: Number(count.pending), reviewed: Number(count.reviewed) };
+  const total = Number((database.prepare(`SELECT COUNT(*) AS total FROM candidate_queries q ${joins} WHERE ${where}`).get(...params, ...(reviewStatus ? [reviewStatus] : [])) as { total: number }).total);
   const pageSize = 20;
   const rows = database.prepare(`
     SELECT q.id, q.submitted_by, q.submitted_by_name, q.submitted_at, q.employee_version_id, q.source_type, q.source_format, q.status, q.expires_at, ${name} AS candidate_name, ${hasProfiles ? "p.parse_status" : "NULL"} AS parse_status,
       ${hasRuns ? "m.status" : "NULL"} AS match_status, ${hasRuns ? "m.result_count" : "NULL"} AS result_count,
       ${hasRuns ? "m.created_at" : "NULL"} AS matched_at,
-      candidate_function_summary(${functionAssessment}) AS possible_functions
+      candidate_function_summary(${functionAssessment}) AS possible_functions,
+      ${reviewSummary} AS review_summary
     FROM candidate_queries q ${joins} WHERE ${where}
     ORDER BY q.submitted_at DESC, q.id DESC LIMIT ? OFFSET ?
-  `).all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
-  return { total, page, pageSize, resultCounts, items: rows.map((row): CandidateQuerySummary => ({
+  `).all(...params, ...(reviewStatus ? [reviewStatus] : []), pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
+  return { total, page, pageSize, resultCounts, reviewCounts, items: rows.map((row): CandidateQuerySummary => ({
     ...queryFromRow(row), candidateName: row.candidate_name as string | null,
     submittedByName: row.submitted_by_name as string | null,
     parseStatus: row.parse_status as CandidateQuerySummary["parseStatus"],
     possibleFunctions: JSON.parse(String(row.possible_functions)) as CandidateQuerySummary["possibleFunctions"],
+    review: JSON.parse(String(row.review_summary)) as CandidateReview,
     matching: row.match_status ? { status: row.match_status as NonNullable<CandidateQuerySummary["matching"]>["status"], resultCount: Number(row.result_count), createdAt: String(row.matched_at) } : null,
   })) };
+}
+
+export function findReviewContext(queryId: string, now: string): { run: ReviewMatchRun | null; decision: CandidateReviewDecision | null } | null {
+  const database = getDatabase();
+  const query = findCandidateQuery(queryId, "", now);
+  if (!query) return null;
+  const hasRuns = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'match_runs'").get();
+  const run = hasRuns ? database.prepare("SELECT id, status, result_count AS resultCount FROM match_runs WHERE query_id = ? AND expires_at > ?").get(queryId, now) as ReviewMatchRun | undefined : undefined;
+  const row = database.prepare("SELECT decision_json FROM candidate_reviews WHERE query_id = ?").get(queryId) as { decision_json: string } | undefined;
+  return { run: run ?? null, decision: row ? JSON.parse(row.decision_json) as CandidateReviewDecision : null };
+}
+
+export function saveCandidateReview(queryId: string, runId: string, decision: CandidateReviewDecision | null, actor: CandidateActor, now: string): boolean {
+  const database = getDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const context = findReviewContext(queryId, now);
+    if (!context || context.run?.id !== runId || assessCandidateReview(context.run, context.decision).status === "NONE") {
+      database.exec("ROLLBACK");
+      return false;
+    }
+    // Preserve the first reviewer when concurrent clients confirm the same run.
+    const current = assessCandidateReview(context.run, context.decision);
+    if (Boolean(current.decision) === Boolean(decision)) {
+      database.exec("COMMIT");
+      return true;
+    }
+    if (decision) {
+      database.prepare("INSERT INTO candidate_reviews (query_id, decision_json) VALUES (?, ?) ON CONFLICT(query_id) DO UPDATE SET decision_json = excluded.decision_json").run(queryId, JSON.stringify(decision));
+    } else {
+      database.prepare("DELETE FROM candidate_reviews WHERE query_id = ?").run(queryId);
+    }
+    database.prepare("INSERT INTO audit_events (id, actor_id, action_type, resource_ref, outcome, created_at) VALUES (?, ?, 'CANDIDATE_MANUAL_REVIEW', ?, ?, ?)")
+      .run(crypto.randomUUID(), actor.id, queryId, decision ? "REVIEWED" : "REOPENED", now);
+    database.exec("COMMIT");
+    return true;
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }

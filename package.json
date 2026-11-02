@@ -32,6 +32,7 @@
     "verify:audit-retention": "tsx scripts/verify-audit-retention.ts",
     "verify:evaluation": "tsx scripts/verify-evaluation.ts",
     "verify:library": "node --import tsx scripts/verify-library.ts",
+    "verify:manual-review": "node --import tsx scripts/verify-manual-review.ts",
     "verify:ai-batch": "node --import tsx scripts/verify-ai-batch.ts",
     "verify:candidate-workbook": "node --import tsx scripts/verify-candidate-workbook.ts",
     "verify:batch-report": "node --import tsx scripts/verify-batch-report.ts",

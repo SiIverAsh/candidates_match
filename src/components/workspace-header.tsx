@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Users, Network, History, Plus, LogOut, Workflow, ContactRound } from "lucide-react";
+import { Users, Network, History, Plus, LogOut, Workflow, ContactRound, ClipboardCheck } from "lucide-react";
 import type { AuthenticatedUser } from "@/modules/auth/domain/user";
 
 export function WorkspaceHeader({ user, onLogout, children }: {
@@ -10,13 +10,15 @@ export function WorkspaceHeader({ user, onLogout, children }: {
   const path = window.location.pathname;
   const candidatePage = path.startsWith("/candidate");
   const resultsPage = path.startsWith("/results");
+  const reviewPage = path === "/reviews";
   const employeePage = path.startsWith("/admin");
   const matchingPage = ["/candidates/new", "/candidate/new", "/candidates/import"].includes(path);
-  const title = matchingPage ? "人脉匹配" : employeePage ? "内部员工人才库" : resultsPage ? "人脉匹配结果" : candidatePage ? "候选人管理" : "人脉匹配";
+  const title = reviewPage ? "人工复核" : matchingPage ? "人脉匹配" : employeePage ? "内部员工人才库" : resultsPage ? "人脉匹配结果" : candidatePage ? "候选人管理" : "人脉匹配";
   const links = [
     { href: "/candidates/new", label: "人脉匹配", icon: Network, active: matchingPage },
     { href: "/candidates", label: "候选人管理", icon: Users, active: candidatePage && !matchingPage },
     { href: "/results", label: "匹配结果历史", icon: History, active: resultsPage },
+    { href: "/reviews", label: "人工复核", icon: ClipboardCheck, active: reviewPage },
     ...(user.role === "HR_ADMIN" ? [{ href: "/admin/employee-data", label: "内部员工人才库", icon: ContactRound, active: employeePage }] : []),
   ];
   return <>

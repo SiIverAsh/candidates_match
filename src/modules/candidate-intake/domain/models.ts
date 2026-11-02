@@ -1,5 +1,6 @@
 import type { PossibleFunctionsSummary } from "./possible-functions";
 import type { ResumeFileFormat } from "../../../shared/domain/import-file";
+import type { CandidateReview } from "./manual-review";
 
 export type CandidateSourceType = "FILE" | "TEXT";
 
@@ -38,6 +39,7 @@ export interface CandidateQuerySummary extends CandidateQuery {
   submittedByName: string | null;
   candidateName: string | null;
   possibleFunctions: PossibleFunctionsSummary;
+  review: CandidateReview;
   parseStatus: "COMPLETE" | "PARTIAL" | "INSUFFICIENT" | "FAILED" | null;
   matching: {
     status: "COMPLETED" | "NO_RESULTS" | "SKIPPED_INSUFFICIENT";
@@ -54,4 +56,5 @@ export interface CandidateQueryPage {
   page: number;
   pageSize: number;
   resultCounts: { found: number; notFound: number };
+  reviewCounts: { pending: number; reviewed: number };
 }

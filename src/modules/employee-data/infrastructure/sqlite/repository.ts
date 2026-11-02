@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { registerTextSearch } from "../../../../shared/infrastructure/sqlite/text-search";
@@ -239,36 +239,66 @@ export function publishEmployeeData(
   data: ParsedEmployeeData,
   actor: ImportActor,
 ): EmployeeDataVersionSummary {
-  return publishData(data, actor, false);
+  return publishData(data, actor, false).version!;
 }
 
 export function appendEmployeeData(data: ParsedEmployeeData, actor: ImportActor): EmployeeDataVersionSummary {
-  return publishData(data, actor, true);
+  return publishData(data, actor, true).version!;
 }
 
-function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boolean): EmployeeDataVersionSummary {
+export function findExistingEmployeeConflicts(employees: EmployeeRecord[]): string[] {
+  const filePath = process.env.CONNECTION_FINDER_DB_PATH ?? path.join(process.cwd(), "var", "connection-finder.sqlite");
+  const existing = globalForEmployeeData.employeeDataDatabase;
+  if (!existing && (filePath === ":memory:" || !existsSync(filePath))) return [];
+  const database = existing ?? new DatabaseSync(filePath, { readOnly: true });
+  try {
+    const hasVersions = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'employee_data_versions'").get();
+    const hasEmployees = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'employees'").get();
+    if (!hasVersions || !hasEmployees) return [];
+    const active = database.prepare("SELECT id FROM employee_data_versions WHERE status = 'ACTIVE' LIMIT 1").get() as { id: string } | undefined;
+    if (!active) return [];
+    const columns = new Set((database.prepare("PRAGMA table_info(employees)").all() as { name: string }[]).map(x => x.name));
+    const urlClause = columns.has("profile_url") ? " OR (? <> '' AND profile_url = ?)" : "";
+    const stmt = database.prepare(`SELECT 1 FROM employees WHERE version_id = ? AND (employee_id = ? OR (? <> '' AND lower(email) = lower(?))${urlClause}) LIMIT 1`);
+    return employees.filter(employee => Boolean(stmt.get(active.id, employee.employeeId, employee.email, employee.email, ...(columns.has("profile_url") ? [employee.profileUrl ?? "", employee.profileUrl ?? ""] : [])))).map(employee => employee.employeeId);
+  } finally { if (!existing) database.close(); }
+}
+
+export function appendNonConflictingEmployeeData(data: ParsedEmployeeData, actor: ImportActor) {
+  return publishData(data, actor, true, true);
+}
+
+function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boolean, skipConflicts = false): { version: EmployeeDataVersionSummary | null; conflicts: string[]; importedCount: number } {
   const database = getDatabase();
   const importedAt = new Date().toISOString();
   const id = createVersionId(importedAt);
   database.exec("BEGIN IMMEDIATE");
   try {
     const active = append ? getEmployeeDataOverview().activeVersion : null;
-    if (active) {
-      for (const employee of data.employees) {
-        const duplicate = database.prepare("SELECT employee_id FROM employees WHERE version_id = ? AND (employee_id = ? OR (? <> '' AND lower(email) = lower(?)) OR (? <> '' AND profile_url = ?))").get(active.id, employee.employeeId, employee.email, employee.email, employee.profileUrl ?? "", employee.profileUrl ?? "");
-        if (duplicate) throw new EmployeeImportConflict("员工编号或邮箱已存在，请核对；本次未覆盖已有员工。");
-      }
-    }
     const seenIds = new Set<string>();
     const seenEmails = new Set<string>();
     const seenUrls = new Set<string>();
+    const conflicts: string[] = [];
+    const accepted: EmployeeRecord[] = [];
+    const idCounts = new Map<string, number>();
+    for (const employee of data.employees) idCounts.set(employee.employeeId, (idCounts.get(employee.employeeId) ?? 0) + 1);
     for (const employee of data.employees) {
       const email = employee.email.toLowerCase();
       const url = employee.profileUrl ?? "";
-      if (seenIds.has(employee.employeeId) || (email && seenEmails.has(email)) || (url && seenUrls.has(url))) throw new EmployeeImportConflict("本批次中存在重复的员工编号、邮箱或主页链接，请核对。");
+      const duplicate = active && database.prepare("SELECT employee_id FROM employees WHERE version_id = ? AND (employee_id = ? OR (? <> '' AND lower(email) = lower(?)) OR (? <> '' AND profile_url = ?))").get(active.id, employee.employeeId, employee.email, employee.email, url, url);
+      if (duplicate || (skipConflicts && (idCounts.get(employee.employeeId) ?? 0) > 1) || seenIds.has(employee.employeeId) || (email && seenEmails.has(email)) || (url && seenUrls.has(url))) {
+        if (!skipConflicts) throw new EmployeeImportConflict("员工编号、邮箱或主页链接已存在，请核对；本次未覆盖已有员工。");
+        conflicts.push(employee.employeeId); continue;
+      }
+      accepted.push(employee);
       seenIds.add(employee.employeeId);
       if (email) seenEmails.add(email);
       if (url) seenUrls.add(url);
+    }
+    if (skipConflicts) {
+      const ids = new Set(accepted.map(employee => employee.employeeId));
+      data = { employees: accepted, workExperiences: data.workExperiences.filter(x => ids.has(x.employeeId)), educationExperiences: data.educationExperiences.filter(x => ids.has(x.employeeId)), researchExperiences: data.researchExperiences?.filter(x => ids.has(x.employeeId)) };
+      if (!accepted.length) { database.exec("ROLLBACK"); return { version: null, conflicts, importedCount: 0 }; }
     }
     const employeeCount = (active?.employeeCount ?? 0) + data.employees.length;
     const workCount = (active?.workExperienceCount ?? 0) + data.workExperiences.length;
@@ -347,7 +377,7 @@ function publishData(data: ParsedEmployeeData, actor: ImportActor, append: boole
       ) VALUES (?, ?, 'EMPLOYEE_DATA_IMPORT', ?, 'PUBLISHED', ?)
     `).run(crypto.randomUUID(), actor.id, id, importedAt);
     database.exec("COMMIT");
-    return { id, importedAt, importedBy: actor.displayName, employeeCount, workExperienceCount: workCount, educationCount };
+    return { version: { id, importedAt, importedBy: actor.displayName, employeeCount, workExperienceCount: workCount, educationCount }, conflicts, importedCount: data.employees.length };
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;

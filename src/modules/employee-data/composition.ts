@@ -15,6 +15,8 @@ import {
   getEmployeeDataOverview as readOverview,
   publishEmployeeData,
   appendEmployeeData,
+  appendNonConflictingEmployeeData,
+  findExistingEmployeeConflicts,
   recordFailedImport,
   listCurrentEmployees,
   findEmployeeProfile,
@@ -39,6 +41,7 @@ export const employeeDataApplication = {
     importEmployeeWorkbook(command, {
       parser: { parse: parseEmployeeWorkbook },
       repository,
+      appendStandardized: appendNonConflictingEmployeeData,
     }),
-  previewWorkbook: (file: ImportEmployeeWorkbookCommand["file"]) => previewEmployeeWorkbook(file, { parse: parseEmployeeWorkbook }),
+  previewWorkbook: (file: ImportEmployeeWorkbookCommand["file"]) => previewEmployeeWorkbook(file, { parse: parseEmployeeWorkbook }, findExistingEmployeeConflicts),
 };

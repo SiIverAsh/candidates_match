@@ -1,0 +1,13 @@
+.review-status-tabs { display: flex; gap: 8px; padding: 12px 18px; border-bottom: 1px solid #e2e8f0; }
+.review-status-tabs button { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: white; color: #64748b; font: inherit; font-size: 12px; }
+.review-status-tabs button.active { border-color: #a5f3fc; background: #ecfeff; color: #0e7490; }
+.review-status-tabs button span { font-variant-numeric: tabular-nums; font-weight: 600; }
+.review-column { min-width: 170px; max-width: 240px; }
+.review-badge { display: inline-flex; border: 1px solid #fde68a; border-radius: 5px; padding: 3px 8px; color: #92400e; background: #fffbeb; font: inherit; font-size: 11px; }
+.review-badge.is-reviewed { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.candidate-review-panel { margin: 16px 0; padding: 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; }
+.candidate-review-panel.is-reviewed { background: #f0fdf4; border-color: #bbf7d0; }
+.review-panel-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.review-panel-heading strong { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.candidate-review-panel p { margin: 10px 0 0; font-size: 12px; }
+.candidate-review-panel > small { display: block; margin-top: 8px; color: #64748b; font-size: 11px; }

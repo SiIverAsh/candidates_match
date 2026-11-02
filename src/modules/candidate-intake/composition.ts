@@ -2,6 +2,10 @@ import { employeeDataApplication } from "../employee-data/composition";
 import { getCandidateReadiness } from "./application/get-readiness";
 import { browseCandidates, getCandidateQuery, listCandidates, type CandidateListInput } from "./application/browse-candidates";
 import { resumeParserApplication } from "../resume-parser/composition";
+import { matchingApplication } from "../matching/composition";
+import { getCandidateReview, reviewCandidate } from "./application/review-candidate";
+import type { CandidateActor } from "./application/ports";
+import type { CandidateReviewFilter } from "./domain/manual-review";
 import {
   submitCandidate,
   type SubmitCandidateCommand,
@@ -12,6 +16,8 @@ import {
   purgeExpiredCandidateQueries,
   findCandidateQuery,
   listCandidateQueries,
+  findReviewContext,
+  saveCandidateReview,
 } from "./infrastructure/sqlite/repository";
 
 const employeeVersions = {
@@ -41,7 +47,14 @@ const dependencies = {
   createId: () => crypto.randomUUID(),
 };
 
+const reviewRepository = { findReviewContext, saveReview: saveCandidateReview };
+
 export const candidateIntakeApplication = {
+  getReview: (queryId: string) => getCandidateReview(queryId, reviewRepository, new Date().toISOString()),
+  review: (queryId: string, runId: string, status: CandidateReviewFilter, actor: CandidateActor) => {
+    matchingApplication.getRun(queryId, actor.id);
+    return reviewCandidate(queryId, runId, status, actor, reviewRepository, new Date().toISOString());
+  },
   browse: (requestedBy: string, input: CandidateListInput) => {
     employeeVersions.readiness();
     return browseCandidates(requestedBy, input, {

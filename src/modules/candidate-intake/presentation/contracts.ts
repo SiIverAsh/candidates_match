@@ -2,6 +2,11 @@ import { z } from "zod";
 import { CANDIDATE_MATCH_STATUSES, CANDIDATE_PARSE_STATUSES, CANDIDATE_SOURCE_FORMATS } from "../domain/column-filters";
 import { CANDIDATE_FUNCTION_FILTERS } from "../domain/possible-functions";
 
+export const candidateReviewSchema = z.object({
+  runId: z.string().min(1),
+  status: z.enum(["PENDING", "REVIEWED"]),
+}).strict();
+
 export const candidateColumnFiltersSchema = z.object({
   name: z.string().trim().max(100).optional(),
   submittedBy: z.string().trim().max(100).optional(),

@@ -25,6 +25,10 @@ export interface ImportActionState {
   totalIssueCount: number;
   version: EmployeeDataVersionSummary | null;
   warnings?: string[];
+  importedCount?: number;
+  skippedCount?: number;
+  totalCount?: number;
+  importMode?: "append" | "replace";
 }
 
 export const INITIAL_IMPORT_STATE: ImportActionState = {

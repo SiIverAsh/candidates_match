@@ -9,6 +9,7 @@ import "./styles/assistant-batch.css";
 import "./styles/matching-workspace.css";
 import "./styles/candidate-column-filters.css";
 import "./styles/research-functions.css";
+import "./styles/manual-review.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element.");

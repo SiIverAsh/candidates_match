@@ -6,6 +6,12 @@ import type {
   CandidateMatchCategory,
 } from "../domain/models";
 import type { CandidateColumnFilters } from "../domain/column-filters";
+import type { CandidateReviewDecision, CandidateReviewFilter, ReviewMatchRun } from "../domain/manual-review";
+
+export interface CandidateReviewRepository {
+  findReviewContext(queryId: string, now: string): { run: ReviewMatchRun | null; decision: CandidateReviewDecision | null } | null;
+  saveReview(queryId: string, runId: string, decision: CandidateReviewDecision | null, actor: CandidateActor, now: string): boolean;
+}
 
 export interface CandidateActor {
   id: string;
@@ -14,7 +20,7 @@ export interface CandidateActor {
 
 export interface CandidateLibraryRepository {
   // Records are shared by the authenticated recruiting workspace, not scoped to their submitter.
-  list(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory, filters?: CandidateColumnFilters): CandidateQueryPage;
+  list(requestedBy: string, now: string, page: number, search: string, resultsOnly: boolean, matchCategory?: CandidateMatchCategory, filters?: CandidateColumnFilters, reviewStatus?: CandidateReviewFilter): CandidateQueryPage;
   find(queryId: string, requestedBy: string, now: string): CandidateQuery | null;
 }
 

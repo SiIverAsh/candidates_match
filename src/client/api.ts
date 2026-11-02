@@ -4,6 +4,7 @@ import type { CandidateReadiness } from "@/modules/candidate-intake/domain/model
 import type { CandidateQuery } from "@/modules/candidate-intake/domain/models";
 import type { CandidateMatchCategory, CandidateQueryPage } from "@/modules/candidate-intake/domain/models";
 import type { CandidateColumnFilters } from "@/modules/candidate-intake/domain/column-filters";
+import type { CandidateReview, CandidateReviewFilter } from "@/modules/candidate-intake/domain/manual-review";
 import type { EmployeeDataOverview } from "@/modules/employee-data/domain/models";
 import type { EmployeeDirectoryPage, EmployeeProfile } from "@/modules/employee-data/domain/models";
 import type { EmployeeResumeDraft } from "@/modules/employee-data/domain/resume-import";
@@ -30,6 +31,7 @@ export interface CandidateDetail {
   query: CandidateQuery;
   profile: CandidateProfile | null;
   run: MatchRun | null;
+  review: CandidateReview;
 }
 
 export interface ResumePreview { text: string | null; sourceFormat: string; message?: string }
@@ -72,15 +74,22 @@ export const api = {
   matchCandidates(queryIds: string[], onEvent: (event: BatchEvent) => void, signal?: AbortSignal) {
     return readBatchStream("/api/candidate-batch/match", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queryIds }), signal }, onEvent);
   },
-  candidates(page = 1, search = "", resultsOnly = false, matchCategory?: CandidateMatchCategory, filters?: CandidateColumnFilters): Promise<CandidateQueryPage> {
+  candidates(page = 1, search = "", resultsOnly = false, matchCategory?: CandidateMatchCategory, filters?: CandidateColumnFilters, reviewStatus?: CandidateReviewFilter): Promise<CandidateQueryPage> {
     const params = new URLSearchParams({ page: String(page), search, resultsOnly: resultsOnly ? "1" : "0" });
     if (matchCategory) params.set("matchCategory", matchCategory);
+    if (reviewStatus) params.set("reviewStatus", reviewStatus);
     if (filters && Object.values(filters).some(value => value !== undefined)) params.set("filters", JSON.stringify(filters));
     return request(`/api/candidate-intake/queries?${params}`);
   },
 
   candidateDetail(queryId: string): Promise<CandidateDetail> {
     return request(`/api/candidate-intake/queries/${encodeURIComponent(queryId)}`);
+  },
+
+  reviewCandidate(queryId: string, runId: string, status: CandidateReviewFilter): Promise<{ review: CandidateReview }> {
+    return request(`/api/candidate-intake/queries/${encodeURIComponent(queryId)}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId, status }),
+    });
   },
 
   resumePreview(queryId: string): Promise<ResumePreview> {

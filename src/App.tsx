@@ -83,9 +83,9 @@ export default function App() {
         ? <CandidateIntakePage user={user} onLogout={logout} />
         : <ForbiddenPage />;
     }
-    if (path === "/candidates" || path === "/results") {
+    if (path === "/candidates" || path === "/results" || path === "/reviews") {
       return hasPermission(user, "candidate:query")
-        ? <CandidateLibraryPage key={path} user={user} onLogout={logout} resultsOnly={path === "/results"} />
+        ? <CandidateLibraryPage key={path} user={user} onLogout={logout} resultsOnly={path === "/results"} reviewOnly={path === "/reviews"} />
         : <ForbiddenPage />;
     }
     const candidateRoute = path.match(/^\/candidates\/([^/]+)$/u);

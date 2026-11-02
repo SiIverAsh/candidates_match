@@ -26,7 +26,7 @@ function renderRows(items: PositionedText[]): string {
     const row = rows.at(-1);
     if (row && Math.abs(item.y - row.y) <= Math.max(2, Math.min(row.height, item.height) * 0.3)) row.items.push(item);
     else rows.push({ y: item.y, height: item.height, items: [item] });
-  }
+  } 
   return rows.map(row => row.items.sort((a, b) => a.x - b.x).map((item, index) => {
     const previous = row.items[index - 1];
     if (!previous) return item.text;
